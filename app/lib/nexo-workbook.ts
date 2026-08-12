@@ -1,0 +1,533 @@
+import type { Worksheet } from "exceljs";
+import { makeExcelCompatible } from "./xlsx-compat.js";
+
+export type WorkbookAccount = {
+  id: string;
+  label: string;
+  amount: number;
+  rate: string;
+  group: "reserve" | "investment" | "cash";
+  note: string;
+};
+
+export type WorkbookEvent = {
+  id: number;
+  date: string;
+  title: string;
+  amount: string;
+  detail: string;
+  numericAmount: number;
+  tone: "blue" | "green" | "orange" | "red";
+  kind: "expense" | "income" | "transfer" | "contribution";
+  destination: "none" | "cetes" | "gbm";
+  includeInProjection: boolean;
+  recurrence: "none" | "weekly" | "monthly" | "annual";
+  recurrenceEnd: string | null;
+  completedDates: string[];
+  skippedDates: string[];
+};
+
+export type WorkbookExtra = {
+  id: number;
+  enabled: boolean;
+  amount: number;
+  recurring: boolean;
+  frequency: "monthly" | "annual";
+  destination: "cetes" | "gbm";
+  startMonth: number;
+  endMonth: number | null;
+  monthOfYear: number;
+  oneTimeMonth: number;
+};
+
+export type WorkbookBackup = {
+  dataMode: "example" | "imported";
+  accounts: WorkbookAccount[];
+  emergencyIds: string[];
+  years: number;
+  target: number;
+  monthlyExpenses: number;
+  reserveRate: number;
+  investmentRate: number;
+  inflationRate: number;
+  extras: WorkbookExtra[];
+  events: WorkbookEvent[];
+};
+
+export type WorkbookScreenshot = {
+  title: string;
+  dataUrl: string;
+  width: number;
+  height: number;
+  extension?: "png" | "jpeg";
+};
+
+const COLORS = {
+  teal: "1D4ED8",
+  tealDark: "17365D",
+  tealSoft: "E7F0FF",
+  cream: "F7F9FC",
+  white: "FFFFFF",
+  ink: "17233D",
+  muted: "52627A",
+  line: "CBD6E5",
+  gold: "92400E",
+  red: "991B1B",
+  blue: "1D4ED8",
+  green: "166534",
+};
+
+const CURRENCY_FORMAT = '"$"#,##0;[Red]("$"#,##0);-';
+const RATE_FORMAT = "0.00%";
+
+function parseIsoDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function toIsoDate(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function groupLabel(group: WorkbookAccount["group"]) {
+  if (group === "reserve") return "Reserva";
+  if (group === "investment") return "Inversión";
+  return "Disponible";
+}
+
+function groupValue(value: unknown): WorkbookAccount["group"] {
+  if (value === "Reserva") return "reserve";
+  if (value === "Inversión") return "investment";
+  return "cash";
+}
+
+function kindLabel(kind: WorkbookEvent["kind"]) {
+  if (kind === "expense") return "Gasto";
+  if (kind === "income") return "Ingreso";
+  if (kind === "contribution") return "Aportación";
+  return "Transferencia";
+}
+
+function kindValue(value: unknown): WorkbookEvent["kind"] {
+  if (value === "Gasto") return "expense";
+  if (value === "Ingreso") return "income";
+  if (value === "Aportación") return "contribution";
+  return "transfer";
+}
+
+function recurrenceLabel(value: WorkbookEvent["recurrence"]) {
+  if (value === "weekly") return "Semanal";
+  if (value === "monthly") return "Mensual";
+  if (value === "annual") return "Anual";
+  return "Una vez";
+}
+
+function recurrenceValue(value: unknown): WorkbookEvent["recurrence"] {
+  if (value === "Semanal") return "weekly";
+  if (value === "Mensual") return "monthly";
+  if (value === "Anual") return "annual";
+  return "none";
+}
+
+function destinationLabel(value: WorkbookEvent["destination"] | WorkbookExtra["destination"]) {
+  if (value === "gbm") return "Inversión";
+  if (value === "cetes") return "Reserva / CETES";
+  return "No incluir";
+}
+
+function destinationValue(value: unknown): WorkbookEvent["destination"] {
+  if (value === "Inversión") return "gbm";
+  if (value === "Reserva / CETES") return "cetes";
+  return "none";
+}
+
+function excelValue(value: unknown) {
+  if (value instanceof Date) return value;
+  if (value && typeof value === "object" && "result" in value) return (value as { result?: unknown }).result;
+  if (value && typeof value === "object" && "richText" in value) {
+    return (value as { richText: { text: string }[] }).richText.map((part) => part.text).join("");
+  }
+  return value;
+}
+
+function textValue(value: unknown) {
+  const normalized = excelValue(value);
+  return normalized === null || normalized === undefined ? "" : String(normalized).trim();
+}
+
+function numberValue(value: unknown) {
+  const normalized = excelValue(value);
+  if (typeof normalized === "number") return normalized;
+  return Number(String(normalized ?? "").replace(/[^\d.-]/g, "")) || 0;
+}
+
+function booleanValue(value: unknown) {
+  return ["sí", "si", "true", "1", "activo"].includes(textValue(value).toLocaleLowerCase("es-MX"));
+}
+
+function dateValue(value: unknown) {
+  const normalized = excelValue(value);
+  if (normalized instanceof Date) return toIsoDate(normalized);
+  return textValue(normalized);
+}
+
+function configureSheet(sheet: Worksheet, freezeRow = 4) {
+  sheet.views = [{ state: "frozen", ySplit: freezeRow, showGridLines: false }];
+  sheet.properties.defaultRowHeight = 20;
+  sheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+}
+
+function addSheetTitle(sheet: Worksheet, title: string, subtitle: string, lastColumn: string) {
+  sheet.mergeCells(`A1:${lastColumn}2`);
+  const titleCell = sheet.getCell("A1");
+  titleCell.value = title;
+  titleCell.font = { name: "Aptos Display", size: 22, bold: true, color: { argb: COLORS.white } };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.teal } };
+  titleCell.alignment = { vertical: "middle", horizontal: "left" };
+  sheet.mergeCells(`A3:${lastColumn}3`);
+  const subtitleCell = sheet.getCell("A3");
+  subtitleCell.value = subtitle;
+  subtitleCell.font = { name: "Aptos", size: 10, color: { argb: COLORS.muted } };
+  subtitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.cream } };
+  subtitleCell.alignment = { vertical: "middle", horizontal: "left" };
+  sheet.getRow(1).height = 29;
+  sheet.getRow(2).height = 20;
+  sheet.getRow(3).height = 25;
+}
+
+function styleTableSheet(sheet: Worksheet, currencyColumns: number[], dateColumns: number[] = []) {
+  sheet.getRow(5).height = 26;
+  sheet.getRow(5).font = { name: "Aptos", bold: true, color: { argb: COLORS.white } };
+  sheet.getRow(5).alignment = { vertical: "middle" };
+  sheet.getRow(5).eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.teal } };
+  });
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber < 6) return;
+    row.font = { name: "Aptos", size: 10, color: { argb: COLORS.ink } };
+    row.alignment = { vertical: "top" };
+    row.eachCell((cell) => {
+      cell.border = { bottom: { style: "hair", color: { argb: COLORS.line } } };
+      if (rowNumber % 2 === 0) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.cream } };
+    });
+  });
+  currencyColumns.forEach((column) => { sheet.getColumn(column).numFmt = CURRENCY_FORMAT; });
+  dateColumns.forEach((column) => { sheet.getColumn(column).numFmt = "yyyy-mm-dd"; });
+  sheet.autoFilter = { from: "A5", to: sheet.getRow(sheet.rowCount).getCell(sheet.columnCount).address };
+}
+
+function writeDataGrid(sheet: Worksheet, headers: string[], rows: unknown[][], emptyRow: unknown[]) {
+  sheet.getRow(5).values = headers;
+  (rows.length ? rows : [emptyRow]).forEach((row, index) => {
+    sheet.getRow(6 + index).values = row;
+  });
+}
+
+function addSummarySheet(workbook: import("exceljs").Workbook, data: WorkbookBackup, exportedAt: Date) {
+  const sheet = workbook.addWorksheet("Resumen", { views: [{ showGridLines: false }] });
+  sheet.columns = Array.from({ length: 8 }, () => ({ width: 16 }));
+  addSheetTitle(sheet, "Nexo · Respaldo financiero", `Exportado el ${exportedAt.toLocaleString("es-MX")} · MXN · Libro reimportable`, "H");
+
+  const total = data.accounts.reduce((sum, account) => sum + account.amount, 0);
+  const reserve = data.accounts.filter((account) => data.emergencyIds.includes(account.id)).reduce((sum, account) => sum + account.amount, 0);
+  const cash = data.accounts.filter((account) => account.group === "cash").reduce((sum, account) => sum + account.amount, 0);
+  const investments = data.accounts.filter((account) => account.group === "investment").reduce((sum, account) => sum + account.amount, 0);
+  const accountEnd = Math.max(data.accounts.length + 5, 6);
+  const cards = [
+    { labelRange: "A5:B5", valueRange: "A6:B7", label: "PATRIMONIO TOTAL", formula: `SUM('Cuentas'!$D$6:$D$${accountEnd})`, result: total },
+    { labelRange: "C5:D5", valueRange: "C6:D7", label: "FONDO DE EMERGENCIA", formula: `SUMIF('Cuentas'!$G$6:$G$${accountEnd},"Sí",'Cuentas'!$D$6:$D$${accountEnd})`, result: reserve },
+    { labelRange: "E5:F5", valueRange: "E6:F7", label: "DISPONIBLE", formula: `SUMIF('Cuentas'!$C$6:$C$${accountEnd},"Disponible",'Cuentas'!$D$6:$D$${accountEnd})`, result: cash },
+    { labelRange: "G5:H5", valueRange: "G6:H7", label: "INVERSIONES", formula: `SUMIF('Cuentas'!$C$6:$C$${accountEnd},"Inversión",'Cuentas'!$D$6:$D$${accountEnd})`, result: investments },
+  ];
+  cards.forEach((card, index) => {
+    const fillColor = index === 0 ? COLORS.teal : COLORS.tealSoft;
+    const fontColor = index === 0 ? COLORS.white : COLORS.tealDark;
+    sheet.mergeCells(card.labelRange);
+    const labelCell = sheet.getCell(card.labelRange.split(":")[0]);
+    labelCell.value = card.label;
+    labelCell.font = { name: "Aptos", size: 9, bold: true, color: { argb: fontColor } };
+    labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillColor } };
+    labelCell.alignment = { vertical: "middle", horizontal: "center" };
+    sheet.mergeCells(card.valueRange);
+    const valueCell = sheet.getCell(card.valueRange.split(":")[0]);
+    valueCell.value = { formula: card.formula, result: card.result };
+    valueCell.numFmt = CURRENCY_FORMAT;
+    valueCell.font = { name: "Aptos Display", size: 18, bold: true, color: { argb: fontColor } };
+    valueCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillColor } };
+    valueCell.alignment = { vertical: "middle", horizontal: "center" };
+  });
+  sheet.getRow(5).height = 30;
+  sheet.getRow(6).height = 30;
+  sheet.getRow(7).height = 30;
+
+  sheet.mergeCells("A9:H9");
+  sheet.getCell("A9").value = "SUPUESTOS Y META";
+  sheet.getCell("A9").font = { bold: true, color: { argb: COLORS.white } };
+  sheet.getCell("A9").fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.tealDark } };
+  const assumptions: Array<[string, number, string]> = [
+    ["Meta del fondo de emergencia", data.target, CURRENCY_FORMAT],
+    ["Gasto esencial mensual (base para 3–6 meses)", data.monthlyExpenses, CURRENCY_FORMAT],
+    ["Horizonte de proyección", data.years, '0 "años"'],
+    ["Rendimiento anual de reserva", data.reserveRate / 100, RATE_FORMAT],
+    ["Rendimiento anual de inversión", data.investmentRate / 100, RATE_FORMAT],
+    ["Inflación anual estimada", data.inflationRate / 100, RATE_FORMAT],
+  ];
+  assumptions.forEach(([label, value, numberFormat], index) => {
+    const row = 10 + index;
+    sheet.mergeCells(`A${row}:D${row}`);
+    sheet.getCell(`A${row}`).value = label;
+    sheet.getCell(`A${row}`).font = { color: { argb: COLORS.ink } };
+    sheet.mergeCells(`E${row}:H${row}`);
+    const valueCell = sheet.getCell(`E${row}`);
+    valueCell.value = value;
+    valueCell.numFmt = numberFormat;
+    valueCell.font = { bold: true, color: { argb: COLORS.blue } };
+    valueCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F1F6FF" } };
+    valueCell.alignment = { horizontal: "right" };
+    sheet.getRow(row).height = 24;
+  });
+
+  sheet.mergeCells("A18:H20");
+  sheet.getCell("A18").value = "Este libro es el respaldo completo de Nexo. Puedes revisar y editar las tablas; para restaurarlo, importa el archivo desde la app sin cambiar los nombres de las hojas ni de las columnas.";
+  sheet.getCell("A18").alignment = { wrapText: true, vertical: "middle" };
+  sheet.getCell("A18").font = { italic: true, color: { argb: COLORS.muted } };
+  sheet.getCell("A18").fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.cream } };
+  return sheet;
+}
+
+function addAccountsSheet(workbook: import("exceljs").Workbook, data: WorkbookBackup) {
+  const sheet = workbook.addWorksheet("Cuentas");
+  configureSheet(sheet, 5);
+  addSheetTitle(sheet, "Cuentas y saldos", "Cada fila conserva el saldo, tipo, rendimiento, nota y pertenencia al fondo de emergencia.", "G");
+  const headers = ["ID", "Cuenta", "Tipo", "Saldo (MXN)", "Rendimiento / estado", "Nota", "Fondo de emergencia"];
+  const rows = data.accounts.map((account) => [account.id, account.label, groupLabel(account.group), account.amount, account.rate, account.note, data.emergencyIds.includes(account.id) ? "Sí" : "No"]);
+  writeDataGrid(sheet, headers, rows, ["", "", "", 0, "", "", "No"]);
+  const lastRow = Math.max(5 + data.accounts.length, 6);
+  sheet.columns = [{ width: 22 }, { width: 28 }, { width: 16 }, { width: 18 }, { width: 24 }, { width: 38 }, { width: 23 }];
+  styleTableSheet(sheet, [4]);
+  sheet.getColumn(7).alignment = { horizontal: "center" };
+  sheet.getCell(`D${lastRow}`).numFmt = CURRENCY_FORMAT;
+}
+
+function addEventsSheet(workbook: import("exceljs").Workbook, data: WorkbookBackup) {
+  const sheet = workbook.addWorksheet("Movimientos");
+  configureSheet(sheet, 5);
+  addSheetTitle(sheet, "Agenda de movimientos", "Incluye movimientos únicos y recurrentes, su impacto en la proyección y su historial de ocurrencias.", "M");
+  const headers = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
+  const rows = data.events.map((event) => [event.id, parseIsoDate(event.date), event.title, kindLabel(event.kind), event.numericAmount, event.detail || null, recurrenceLabel(event.recurrence), event.recurrenceEnd ? parseIsoDate(event.recurrenceEnd) : null, destinationLabel(event.destination), event.includeInProjection ? "Sí" : "No", event.tone, event.completedDates.join(", ") || null, event.skippedDates.join(", ") || null]);
+  writeDataGrid(sheet, headers, rows, [null, null, null, null, 0, null, "Una vez", null, "No incluir", "No", "blue", null, null]);
+  sheet.columns = [{ width: 9 }, { width: 16 }, { width: 28 }, { width: 16 }, { width: 17 }, { width: 36 }, { width: 15 }, { width: 16 }, { width: 20 }, { width: 16 }, { width: 12 }, { width: 26 }, { width: 26 }];
+  styleTableSheet(sheet, [5], [2, 8]);
+  [10, 11].forEach((column) => { sheet.getColumn(column).alignment = { horizontal: "center" }; });
+}
+
+function addExtrasSheet(workbook: import("exceljs").Workbook, data: WorkbookBackup) {
+  const sheet = workbook.addWorksheet("Escenarios");
+  configureSheet(sheet, 5);
+  addSheetTitle(sheet, "Escenarios de aportación", "Simulaciones de ingresos adicionales que alimentan la proyección de Nexo.", "J");
+  const headers = ["ID", "Activo", "Monto (MXN)", "Recurrente", "Frecuencia", "Destino", "Mes inicio", "Mes final", "Mes del año", "Mes único"];
+  const rows = data.extras.map((extra) => [extra.id, extra.enabled ? "Sí" : "No", extra.amount, extra.recurring ? "Sí" : "No", extra.frequency === "monthly" ? "Mensual" : "Anual", destinationLabel(extra.destination), extra.startMonth, extra.endMonth, extra.monthOfYear, extra.oneTimeMonth]);
+  writeDataGrid(sheet, headers, rows, [null, "No", 0, "No", "Mensual", "Inversión", 1, null, 1, 1]);
+  sheet.columns = [{ width: 9 }, { width: 12 }, { width: 18 }, { width: 15 }, { width: 16 }, { width: 21 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 14 }];
+  styleTableSheet(sheet, [3]);
+  [2, 4, 5, 7, 8, 9, 10].forEach((column) => { sheet.getColumn(column).alignment = { horizontal: "center" }; });
+}
+
+function addScreenshotsSheet(workbook: import("exceljs").Workbook, screenshots: WorkbookScreenshot[]) {
+  const sheet = workbook.addWorksheet("Capturas", { views: [{ showGridLines: false }] });
+  addSheetTitle(sheet, "Capturas de la app", "Vista visual del estado de Nexo al momento de crear este respaldo.", "O");
+  sheet.columns = Array.from({ length: 15 }, () => ({ width: 10 }));
+  let startRow = 5;
+  screenshots.forEach((screenshot) => {
+    sheet.mergeCells(`A${startRow}:O${startRow}`);
+    const label = sheet.getCell(`A${startRow}`);
+    label.value = screenshot.title;
+    label.font = { bold: true, size: 13, color: { argb: COLORS.tealDark } };
+    label.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.tealSoft } };
+    label.alignment = { vertical: "middle" };
+    sheet.getRow(startRow).height = 27;
+    const maxWidth = 1020;
+    const imageWidth = Math.min(maxWidth, screenshot.width);
+    const imageHeight = Math.max(120, Math.round(screenshot.height * (imageWidth / screenshot.width)));
+    const imageId = workbook.addImage({ base64: screenshot.dataUrl, extension: screenshot.extension ?? "png" });
+    sheet.addImage(imageId, { tl: { col: 0, row: startRow }, ext: { width: imageWidth, height: imageHeight } });
+    const imageRows = Math.ceil(imageHeight / 20);
+    for (let row = startRow + 1; row <= startRow + imageRows; row += 1) sheet.getRow(row).height = 15;
+    startRow += imageRows + 4;
+  });
+  sheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+}
+
+function addConfigSheet(workbook: import("exceljs").Workbook, data: WorkbookBackup, exportedAt: Date) {
+  const sheet = workbook.addWorksheet("Configuración");
+  configureSheet(sheet, 5);
+  addSheetTitle(sheet, "Configuración de restauración", "Supuestos y metadatos que Nexo utiliza para reconstruir el respaldo. Conserva los nombres de estos campos.", "B");
+  sheet.getRow(5).values = ["Campo", "Valor"];
+  const rows: Array<[string, string | number]> = [
+    ["Formato", "NEXO_XLSX_BACKUP"],
+    ["Versión", 5],
+    ["Exportado", exportedAt.toISOString()],
+    ["Modo", data.dataMode],
+    ["Horizonte", data.years],
+    ["Meta", data.target],
+    ["GastoMensual", data.monthlyExpenses],
+    ["TasaReserva", data.reserveRate],
+    ["TasaInversion", data.investmentRate],
+    ["Inflacion", data.inflationRate],
+  ];
+  rows.forEach((row, index) => { sheet.getRow(index + 6).values = row; });
+  sheet.columns = [{ width: 28 }, { width: 38 }];
+  styleTableSheet(sheet, []);
+  sheet.getCell("A3").alignment = { wrapText: true, vertical: "middle", horizontal: "left" };
+  sheet.getRow(3).height = 34;
+  rows.forEach((_, index) => {
+    const valueCell = sheet.getCell(index + 6, 2);
+    valueCell.font = { name: "Aptos", size: 10, bold: true, color: { argb: COLORS.blue } };
+    valueCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F1F6FF" } };
+  });
+}
+
+async function captureElement(title: string, element: HTMLElement): Promise<WorkbookScreenshot> {
+  const { default: html2canvas } = await import("html2canvas");
+  const canvas = await html2canvas(element, {
+    backgroundColor: getComputedStyle(document.body).backgroundColor || "#f5f8ff",
+    scale: Math.min(window.devicePixelRatio || 1, 1.5),
+    logging: false,
+    useCORS: true,
+    windowWidth: Math.max(document.documentElement.clientWidth, element.scrollWidth),
+    windowHeight: Math.max(document.documentElement.clientHeight, element.scrollHeight),
+  });
+  return { title, dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
+}
+
+export async function captureNexoScreenshots() {
+  const sections = [
+    { title: "Resumen financiero", selector: "#export-overview" },
+    { title: "Cuentas y fondo de emergencia", selector: "#cuentas" },
+    { title: "Proyección financiera", selector: "#proyeccion .projection-grid" },
+  ];
+  const screenshots: WorkbookScreenshot[] = [];
+  for (const section of sections) {
+    const element = document.querySelector<HTMLElement>(section.selector);
+    if (!element) throw new Error(`No se encontró la sección ${section.title}`);
+    screenshots.push(await captureElement(section.title, element));
+  }
+  return screenshots;
+}
+
+export async function buildNexoWorkbook(data: WorkbookBackup, screenshots: WorkbookScreenshot[]) {
+  const { default: ExcelJS } = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  const exportedAt = new Date();
+  workbook.creator = "Nexo";
+  workbook.lastModifiedBy = "Nexo";
+  workbook.created = exportedAt;
+  workbook.modified = exportedAt;
+  workbook.title = "Respaldo financiero Nexo";
+  workbook.subject = "Cuentas, movimientos, escenarios, supuestos y capturas";
+  workbook.company = "Nexo";
+  workbook.calcProperties.fullCalcOnLoad = true;
+  addSummarySheet(workbook, data, exportedAt);
+  addAccountsSheet(workbook, data);
+  addEventsSheet(workbook, data);
+  addExtrasSheet(workbook, data);
+  addScreenshotsSheet(workbook, screenshots);
+  addConfigSheet(workbook, data, exportedAt);
+  return makeExcelCompatible(await workbook.xlsx.writeBuffer());
+}
+
+export async function exportNexoWorkbook(data: WorkbookBackup, screenshots: WorkbookScreenshot[], fileName: string) {
+  const output = await buildNexoWorkbook(data, screenshots);
+  const blob = new Blob([output], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function tableRows(sheet: Worksheet, expectedHeaders: string[]) {
+  const headerRow = Array.from({ length: 10 }, (_, index) => index + 1).find((rowNumber) => textValue(sheet.getCell(rowNumber, 1).value) === expectedHeaders[0]);
+  if (!headerRow) throw new Error(`No se encontró la tabla de ${sheet.name}`);
+  const actualHeaders = expectedHeaders.map((_, index) => textValue(sheet.getCell(headerRow, index + 1).value));
+  if (actualHeaders.some((header, index) => header !== expectedHeaders[index])) throw new Error(`Las columnas de ${sheet.name} fueron modificadas`);
+  const rows: unknown[][] = [];
+  for (let rowNumber = headerRow + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
+    const values = expectedHeaders.map((_, index) => sheet.getCell(rowNumber, index + 1).value);
+    if (values.every((value) => textValue(value) === "")) continue;
+    if (textValue(values[0]) === "") continue;
+    rows.push(values);
+  }
+  return rows;
+}
+
+export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
+  const { default: ExcelJS } = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await file.arrayBuffer());
+  const configSheet = workbook.getWorksheet("Configuración");
+  const accountsSheet = workbook.getWorksheet("Cuentas");
+  const eventsSheet = workbook.getWorksheet("Movimientos");
+  const extrasSheet = workbook.getWorksheet("Escenarios");
+  if (!configSheet || !accountsSheet || !eventsSheet || !extrasSheet) throw new Error("El libro no contiene todas las hojas de Nexo");
+  const config = new Map<string, unknown>();
+  configSheet.eachRow((row) => config.set(textValue(row.getCell(1).value), excelValue(row.getCell(2).value)));
+  if (config.get("Formato") !== "NEXO_XLSX_BACKUP" || numberValue(config.get("Versión")) < 5) throw new Error("Formato de respaldo no compatible");
+
+  const accountHeaders = ["ID", "Cuenta", "Tipo", "Saldo (MXN)", "Rendimiento / estado", "Nota", "Fondo de emergencia"];
+  const accountRows = tableRows(accountsSheet, accountHeaders);
+  const accounts = accountRows.map((row) => ({ id: textValue(row[0]), label: textValue(row[1]), group: groupValue(excelValue(row[2])), amount: Math.max(0, numberValue(row[3])), rate: textValue(row[4]), note: textValue(row[5]) }));
+  const emergencyIds = accountRows.filter((row) => booleanValue(row[6])).map((row) => textValue(row[0]));
+
+  const eventHeaders = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
+  const events = tableRows(eventsSheet, eventHeaders).map((row) => {
+    const numericAmount = Math.max(0, numberValue(row[4]));
+    const destination = destinationValue(excelValue(row[8]));
+    const tone = textValue(row[10]);
+    return {
+      id: numberValue(row[0]),
+      date: dateValue(row[1]),
+      title: textValue(row[2]),
+      kind: kindValue(excelValue(row[3])),
+      numericAmount,
+      amount: numericAmount > 0 ? `$${Math.round(numericAmount).toLocaleString("es-MX")}` : "$0",
+      detail: textValue(row[5]),
+      recurrence: recurrenceValue(excelValue(row[6])),
+      recurrenceEnd: dateValue(row[7]) || null,
+      destination,
+      includeInProjection: booleanValue(row[9]) && destination !== "none",
+      tone: (["blue", "green", "orange", "red"].includes(tone) ? tone : "blue") as WorkbookEvent["tone"],
+      completedDates: textValue(row[11]).split(",").map((value) => value.trim()).filter(Boolean),
+      skippedDates: textValue(row[12]).split(",").map((value) => value.trim()).filter(Boolean),
+    };
+  });
+
+  const extraHeaders = ["ID", "Activo", "Monto (MXN)", "Recurrente", "Frecuencia", "Destino", "Mes inicio", "Mes final", "Mes del año", "Mes único"];
+  const extras = tableRows(extrasSheet, extraHeaders).map((row) => ({
+    id: numberValue(row[0]),
+    enabled: booleanValue(row[1]),
+    amount: Math.max(0, numberValue(row[2])),
+    recurring: booleanValue(row[3]),
+    frequency: (textValue(row[4]) === "Anual" ? "annual" : "monthly") as WorkbookExtra["frequency"],
+    destination: (destinationValue(excelValue(row[5])) === "cetes" ? "cetes" : "gbm") as WorkbookExtra["destination"],
+    startMonth: Math.max(1, numberValue(row[6]) || 1),
+    endMonth: textValue(row[7]) === "" ? null : Math.max(1, numberValue(row[7])),
+    monthOfYear: Math.max(1, Math.min(12, numberValue(row[8]) || 1)),
+    oneTimeMonth: Math.max(1, numberValue(row[9]) || 1),
+  }));
+
+  return {
+    dataMode: "imported",
+    accounts,
+    emergencyIds,
+    years: Math.max(1, Math.min(30, numberValue(config.get("Horizonte")) || 15)),
+    target: Math.max(1, numberValue(config.get("Meta"))),
+    monthlyExpenses: Math.max(0, numberValue(config.get("GastoMensual"))),
+    reserveRate: numberValue(config.get("TasaReserva")),
+    investmentRate: numberValue(config.get("TasaInversion")),
+    inflationRate: Math.max(0, numberValue(config.get("Inflacion"))),
+    extras,
+    events,
+  };
+}
