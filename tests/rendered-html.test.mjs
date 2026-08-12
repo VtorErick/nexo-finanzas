@@ -36,7 +36,7 @@ test("server-renders the Nexo financial dashboard", async () => {
   assert.match(html, /Modo ejemplo/);
   assert.match(html, /Cuenta diaria/);
   assert.match(html, /Montos ficticios para explorar/);
-  assert.match(html, /Fondo de emergencia/);
+  assert.match(html, /Reserva/);
   assert.match(html, /Crecimiento y poder adquisitivo/);
   assert.match(html, /https:\/\/nexo\.test\/og\.png/i);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/i);
@@ -58,7 +58,9 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /no es un ingreso/);
   assert.match(html, /Cobertura actual/);
   assert.match(html, /Agregar movimiento/);
-  assert.match(html, /Respaldar datos/);
+  assert.match(html, /Abrir respaldo/);
+  assert.match(html, /Ajustar meta de reserva/);
+  assert.match(html, /Guardar o restaurar tus datos/);
 });
 
 test("includes the extended planning controls", async () => {
@@ -71,6 +73,7 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /Agregar cuenta/);
   assert.match(source, /Inflación anual estimada/);
   assert.match(source, /const formatCompact = \(value: number\) =>/);
+  assert.match(source, /const labelStep = compactChart/);
   assert.match(source, /function getEventOccurrences\(/);
   assert.match(source, /function getMexicoToday\(/);
   assert.doesNotMatch(source, /const REFERENCE_DATE/);
@@ -92,7 +95,7 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /const DEFAULT_YEARS = 5/);
   assert.match(source, /const STORAGE_KEY = "nexo-finanzas-demo-v5"/);
   assert.match(source, /dataMode/);
-  assert.match(source, /Descargar Excel \(\.xlsx\)/);
+  assert.match(source, /Descargar Excel/);
   assert.match(source, /captureNexoScreenshots/);
   assert.match(source, /importNexoWorkbook/);
   assert.doesNotMatch(source, /nexo-respaldo-\$\{todayIso\}\.json/);
@@ -111,8 +114,8 @@ test("defines accessible light and dark themes with distinguishable chart series
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(css, /html\[data-theme="dark"\]/);
-  assert.match(css, /--bg: #f4f7ff/);
-  assert.match(css, /--bg: #071426/);
+  assert.match(css, /--bg: #f5f5f5/);
+  assert.match(css, /--bg: #0d0d0d/);
   assert.match(css, /\.gbm-stroke \{[^}]*stroke-dasharray: 11 6/s);
   assert.match(css, /\.real-stroke \{[^}]*stroke-dasharray: 3 7/s);
   assert.match(css, /\.marker-investment/);
