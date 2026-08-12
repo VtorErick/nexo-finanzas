@@ -400,9 +400,14 @@ function ProjectionChart({
   baseDate: Date;
 }) {
   const [hoveredMonth, setHoveredMonth] = useState<number | null>(null);
-  const width = 920;
-  const height = 310;
-  const padding = { top: 22, right: 18, bottom: 38, left: 62 };
+  const [frameWidth, setFrameWidth] = useState(920);
+  const chartFrameRef = useRef<HTMLDivElement>(null);
+  const compactChart = frameWidth < 640;
+  const width = frameWidth;
+  const height = compactChart ? 240 : 310;
+  const padding = compactChart
+    ? { top: 18, right: 12, bottom: 32, left: 46 }
+    : { top: 22, right: 18, bottom: 38, left: 62 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
   const maxValue = Math.max(...points.map((point) => Math.max(point.reserve, point.gbm, point.realTotal)));
@@ -420,6 +425,19 @@ function ProjectionChart({
       <text key={year} x={x(year * 12)} y={height - 11} textAnchor="middle">{year === 0 ? "Hoy" : `${year}a`}</text>
     ));
 
+  useEffect(() => {
+    const node = chartFrameRef.current;
+    if (!node) return;
+    const updateWidth = () => {
+      if (node.clientWidth > 0) setFrameWidth(Math.round(node.clientWidth));
+    };
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   const handleMove = (event: ReactPointerEvent<SVGRectElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const relativeX = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
@@ -434,7 +452,7 @@ function ProjectionChart({
         <span><i className="legend-line real-line" /><span>Patrimonio en pesos de hoy<b>{formatMoney(points.at(-1)!.realTotal)}</b></span></span>
         {goalMonth && <span><i className="legend-marker" /> Meta en {formatDurationMonths(goalMonth)}</span>}
       </div>
-      <div className="chart-frame">
+      <div className="chart-frame" ref={chartFrameRef}>
         <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Comparación de reserva nominal, inversión nominal y patrimonio total en pesos de hoy">
           <g className="chart-grid">
             {[0, 1, 2, 3, 4].map((tick) => {
