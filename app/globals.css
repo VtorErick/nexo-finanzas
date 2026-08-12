@@ -106,7 +106,7 @@ body {
   font-size: 16px;
   line-height: 1.5;
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   transition: background-color 200ms ease, color 200ms ease;
   -webkit-font-smoothing: antialiased;
 }
@@ -1112,6 +1112,12 @@ html[data-theme="dark"] .primary-button { box-shadow: none; }
   .metric-card { align-items: center; display: flex; min-height: 112px; padding: 18px; }
   .metric-card > div:last-child { margin-top: 0; }
   .section-heading { align-items: flex-start; display: grid; }
+  .section-heading > div,
+  .projection-heading,
+  .projection-heading .projection-controls,
+  .horizon-presets,
+  .horizon-control { min-width: 0; max-width: 100%; width: 100%; }
+  .horizon-presets button { min-width: 0; padding-left: 4px; padding-right: 4px; }
   .section-heading > .secondary-button { margin-top: 14px; }
   .backup-actions { justify-content: stretch; }
 }
