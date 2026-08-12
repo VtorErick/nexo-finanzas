@@ -617,14 +617,24 @@ export default function Home() {
     const sections = ["inicio", "cuentas", "agenda", "proyeccion", "respaldo"]
       .map((id) => document.getElementById(id))
       .filter((section): section is HTMLElement => section !== null);
-    const observer = new IntersectionObserver(
-      (entries) => entries.forEach((entry) => {
-        if (entry.isIntersecting) setActiveSection(entry.target.id);
-      }),
-      { rootMargin: "-28% 0px -64% 0px" },
-    );
-    sections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
+    const updateActiveSection = () => {
+      if (window.scrollY < 160) {
+        setActiveSection("inicio");
+        return;
+      }
+      const marker = window.innerHeight * 0.32;
+      const current = sections.reduce((active, section) => {
+        return section.getBoundingClientRect().top <= marker ? section.id : active;
+      }, "inicio");
+      setActiveSection(current);
+    };
+    updateActiveSection();
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("resize", updateActiveSection);
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+    };
   }, []);
 
   useEffect(() => {
@@ -880,6 +890,7 @@ export default function Home() {
   }
 
   function openBackupPanel() {
+    setActiveSection("respaldo");
     window.requestAnimationFrame(() => {
       const backupPanel = document.querySelector<HTMLDetailsElement>("#respaldo");
       if (backupPanel) backupPanel.open = true;
@@ -1207,7 +1218,7 @@ export default function Home() {
         </section>
 
         <details id="respaldo" className="panel backup-panel">
-          <summary className="backup-summary"><span className="backup-summary-copy"><span className="eyebrow">RESPALDO</span><strong>Guardar o restaurar tus datos</strong><small>Excel para conservarlos o moverlos a otro navegador</small></span><span className="backup-summary-action">Abrir <b aria-hidden="true">+</b></span></summary>
+          <summary className="backup-summary" onClick={() => setActiveSection("respaldo")}><span className="backup-summary-copy"><span className="eyebrow">RESPALDO</span><strong>Guardar o restaurar tus datos</strong><small>Excel para conservarlos o moverlos a otro navegador</small></span><span className="backup-summary-action"><span>Abrir</span><b aria-hidden="true">+</b></span></summary>
           <div className="backup-body">
             <div className="backup-copy"><h2 id="backup-title">Una copia clara de tus finanzas</h2><p>Descarga un Excel con tus cuentas, movimientos y proyecciones. Después puedes importarlo para continuar en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> resumen, cuentas, movimientos, escenarios y configuración de restauración.</p></div>
             <div className="backup-actions"><button className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando Excel…" : "Descargar Excel"}</button><button className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar Excel</button></div>
