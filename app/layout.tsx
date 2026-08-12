@@ -1,18 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -56,7 +44,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <meta property="og:image:height" content="630" />
         <meta name="twitter:image" content={`${origin}/og.png`} />
       </head>
-      <body className={`${inter.variable} ${geistMono.variable}`}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
