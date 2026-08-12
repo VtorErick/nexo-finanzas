@@ -111,8 +111,8 @@ test("defines accessible light and dark themes with distinguishable chart series
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(css, /html\[data-theme="dark"\]/);
-  assert.match(css, /--bg: #f4f7ff/);
-  assert.match(css, /--bg: #071426/);
+  assert.match(css, /--bg: #f5f5f5/);
+  assert.match(css, /--bg: #0d0d0d/);
   assert.match(css, /\.gbm-stroke \{[^}]*stroke-dasharray: 11 6/s);
   assert.match(css, /\.real-stroke \{[^}]*stroke-dasharray: 3 7/s);
   assert.match(css, /\.marker-investment/);

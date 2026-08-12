@@ -8,6 +8,7 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { captureNexoScreenshots, exportNexoWorkbook, importNexoWorkbook } from "./lib/nexo-workbook";
 
@@ -354,6 +355,29 @@ function BrandMark() {
   return <span className="brand-mark" aria-hidden="true">N</span>;
 }
 
+type IconName = "home" | "wallet" | "calendar" | "trend" | "database" | "sun" | "moon" | "shield" | "cash" | "download" | "target";
+const ICONS: Record<IconName, ReactNode> = {
+  home: (<><path d="M3.5 10.4 12 3.5l8.5 6.9" /><path d="M5.5 9.6V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.6" /><path d="M9.5 21v-5.5h5V21" /></>),
+  wallet: (<><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z" /><path d="M14.5 10.5H20v4h-5.5a2 2 0 0 1 0-4z" /></>),
+  calendar: (<><path d="M7.5 3.5v3M16.5 3.5v3" /><path d="M4.5 9.5h15" /><path d="M6.5 5.5h11a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2z" /></>),
+  trend: (<><path d="M3.5 17.5l5.5-5.5 3.5 3.5 7.5-7.5" /><path d="M15 8h5.5v5.5" /></>),
+  database: (<><ellipse cx="12" cy="5.5" rx="7.5" ry="2.5" /><path d="M4.5 5.5v13c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-13" /><path d="M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5" /></>),
+  sun: (<><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" /></>),
+  moon: (<path d="M20.5 13.2A8.5 8.5 0 1 1 10.8 3.5a7 7 0 0 0 9.7 9.7z" />),
+  shield: (<><path d="M12 3.2 19 6v5.2c0 4.3-2.9 8.1-7 9.6-4.1-1.5-7-5.3-7-9.6V6z" /><path d="M9.2 12.1l2 2 3.6-3.7" /></>),
+  cash: (<><rect x="3" y="6.5" width="18" height="11" rx="2" /><circle cx="12" cy="12" r="2.6" /><path d="M6.3 9.7v.01M17.7 14.3v.01" /></>),
+  download: (<><path d="M12 3.5V15" /><path d="M7.5 10.5 12 15l4.5-4.5" /><path d="M4.5 20.5h15" /></>),
+  target: (<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.8" /><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /></>),
+};
+
+function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+  return (
+    <svg aria-hidden="true" className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {ICONS[name]}
+    </svg>
+  );
+}
+
 function GoalRing({ progress }: { progress: number }) {
   return (
     <div className="goal-ring" style={{ "--progress": `${progress * 3.6}deg` } as CSSProperties}>
@@ -540,9 +564,11 @@ export default function Home() {
   const [backupBusy, setBackupBusy] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [storageReady, setStorageReady] = useState(false);
+  const [activeSection, setActiveSection] = useState("inicio");
   const closeEditorButtonRef = useRef<HTMLButtonElement>(null);
   const editorTriggerRef = useRef<HTMLElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
+  const themeResolvedRef = useRef(false);
 
   const total = sumAccounts(accounts);
   const reserve = selectedTotal(accounts, emergencyIds);
@@ -586,16 +612,34 @@ export default function Home() {
       const preferredTheme: Theme = savedTheme === "dark" || savedTheme === "light"
         ? savedTheme
         : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      setTheme(preferredTheme);
+      themeResolvedRef.current = true;
+      setTheme((current) => current === preferredTheme ? current : preferredTheme);
+      document.documentElement.dataset.theme = preferredTheme;
+      document.documentElement.style.colorScheme = preferredTheme;
     });
     return () => window.cancelAnimationFrame(frameId);
   }, []);
 
   useEffect(() => {
+    if (!themeResolvedRef.current) return;
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    const sections = ["inicio", "cuentas", "agenda", "proyeccion", "respaldo"]
+      .map((id) => document.getElementById(id))
+      .filter((section): section is HTMLElement => section !== null);
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach((entry) => {
+        if (entry.isIntersecting) setActiveSection(entry.target.id);
+      }),
+      { rootMargin: "-28% 0px -64% 0px" },
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -938,7 +982,6 @@ export default function Home() {
     setEventDraft(createEventDraft(today));
     setRemovedEvent(null);
     setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-    setCalendarOpenMobile(false);
     setSelectedDraftAccountId(freshAccounts[0]?.id ?? "");
     setRemovedDraftAccount(null);
     setRemovedDraftWasEmergency(false);
@@ -973,29 +1016,67 @@ export default function Home() {
     );
   }
 
+  const navItems: Array<{ id: string; label: string; icon: IconName }> = [
+    { id: "inicio", label: "Resumen", icon: "home" },
+    { id: "cuentas", label: "Cuentas", icon: "wallet" },
+    { id: "agenda", label: "Movimientos", icon: "calendar" },
+    { id: "proyeccion", label: "Proyección", icon: "trend" },
+  ];
+
   return (
     <main className="app-shell">
       <a className="skip-link" href="#contenido">Saltar al contenido</a>
-      <header className="topbar">
-        <a className="brand" href="#inicio"><BrandMark /><span>Nexo</span></a>
-        <nav className="top-nav" aria-label="Navegación principal">
-          <a className="active" href="#inicio">Resumen</a><a href="#cuentas">Cuentas</a><a href="#agenda">Movimientos</a><a href="#proyeccion">Proyección</a>
+
+      <aside className="sidebar">
+        <a className="brand" href="#inicio"><BrandMark /><span className="brand-text">Nexo<small>finanzas personales</small></span></a>
+        <nav className="side-nav" aria-label="Navegación principal">
+          {navItems.map((item) => (
+            <a key={item.id} className={activeSection === item.id ? "active" : ""} aria-current={activeSection === item.id ? "true" : undefined} href={`#${item.id}`}>
+              <Icon name={item.icon} size={19} /><span>{item.label}</span>
+            </a>
+          ))}
+          <a className={activeSection === "respaldo" ? "active" : ""} aria-current={activeSection === "respaldo" ? "true" : undefined} href="#respaldo">
+            <Icon name="database" size={19} /><span>Respaldo</span>
+          </a>
         </nav>
-        <div className="top-actions"><span className={`private-pill ${dataMode === "example" ? "example" : ""}`}><i /> {dataMode === "example" ? "Modo ejemplo" : "Datos importados"}</span><button className="theme-toggle" type="button" aria-label={`Cambiar a tema ${theme === "light" ? "oscuro" : "claro"}`} aria-pressed={theme === "dark"} onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}><span aria-hidden="true">{theme === "light" ? "☾" : "☀"}</span><b>{theme === "light" ? "Oscuro" : "Claro"}</b></button><button className="backup-button" onClick={openBackupPanel}>Respaldo</button><button className="primary-button edit-balances-button" onClick={openEditor}>Editar saldos</button></div>
+        <div className="sidebar-foot">
+          <span className={`private-pill ${dataMode === "example" ? "example" : ""}`}><i /> {dataMode === "example" ? "Modo ejemplo" : "Datos importados"}</span>
+          <div className="sidebar-foot-row">
+            <button className="theme-toggle" type="button" aria-label={`Cambiar a tema ${theme === "light" ? "oscuro" : "claro"}`} aria-pressed={theme === "dark"} onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}>
+              <span className="theme-icon" aria-hidden="true"><Icon name={theme === "light" ? "moon" : "sun"} size={17} /></span><b>{theme === "light" ? "Oscuro" : "Claro"}</b>
+            </button>
+            <button className="backup-button" onClick={openBackupPanel}><Icon name="download" size={16} /><span>Respaldo</span></button>
+          </div>
+          <button className="primary-button edit-balances-button" onClick={openEditor}>Editar saldos</button>
+        </div>
+      </aside>
+
+      <header className="mobile-topbar">
+        <a className="brand" href="#inicio"><BrandMark /><span className="brand-text">Nexo</span></a>
+        <div className="top-actions">
+          <button className="theme-toggle icon-only" type="button" aria-label={`Cambiar a tema ${theme === "light" ? "oscuro" : "claro"}`} aria-pressed={theme === "dark"} onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}>
+            <span className="theme-icon" aria-hidden="true"><Icon name={theme === "light" ? "moon" : "sun"} size={18} /></span><b>{theme === "light" ? "Oscuro" : "Claro"}</b>
+          </button>
+          <button className="primary-button edit-balances-button" onClick={openEditor}><span className="label-full">Editar saldos</span><span className="label-short">Editar</span></button>
+        </div>
       </header>
 
+      <div className="content-area">
       <div className="page-wrap" id="contenido" tabIndex={-1}>
         <div id="export-overview">
           <section id="inicio" className="page-heading">
             <div><span className="eyebrow">{formatHeadingDate(today)}</span><h1>Buenos días.</h1><p>{dataMode === "example" ? "Explora Nexo con información ficticia y reemplázala cuando quieras." : "Este es el estado de tus finanzas hoy."}</p></div>
-            <span className="currency-pill">MXN · {lastSavedAt ? "Guardado automáticamente" : "Preparando datos"}</span>
+            <div className="heading-meta">
+              <span className={`private-pill heading-mode ${dataMode === "example" ? "example" : ""}`}><i /> {dataMode === "example" ? "Modo ejemplo" : "Datos importados"}</span>
+              <span className="currency-pill">MXN · {lastSavedAt ? "Guardado automáticamente" : "Preparando datos"}</span>
+            </div>
           </section>
 
           <section className="overview-grid" aria-label="Resumen financiero">
             <article className="net-worth-card"><div className="card-label"><span>Patrimonio total</span><span className="soft-badge">{accounts.length} cuentas</span></div><strong className="hero-amount">{formatMoney(total)}</strong><div className="net-worth-foot"><span><i className="status-dot green" /> {dataMode === "example" ? "Datos de ejemplo" : "Saldos al día"}</span><small>{dataMode === "example" ? "Montos ficticios para explorar" : "Datos guardados en este dispositivo"}</small></div></article>
-            <article className="metric-card"><div className="metric-icon reserve-icon">R</div><div><span>Fondo de emergencia</span><strong>{formatMoney(reserve)}</strong><small>{reserveProgress}% de la meta</small></div></article>
-            <article className="metric-card"><div className="metric-icon cash-icon">D</div><div><span>Disponible</span><strong>{formatMoney(cash)}</strong><small>Liquidez · no se proyecta</small></div></article>
-            <article className="metric-card"><div className="metric-icon invest-icon">I</div><div><span>Inversiones</span><strong>{formatMoney(gbm)}</strong><small>{accounts.filter((account) => account.group === "investment").length} {accounts.filter((account) => account.group === "investment").length === 1 ? "cuenta" : "cuentas"} · largo plazo</small></div></article>
+            <article className="metric-card"><div className="metric-icon reserve-icon"><Icon name="shield" size={19} /></div><div><span>Fondo de emergencia</span><strong>{formatMoney(reserve)}</strong><small>{reserveProgress}% de la meta</small></div></article>
+            <article className="metric-card"><div className="metric-icon cash-icon"><Icon name="cash" size={19} /></div><div><span>Disponible</span><strong>{formatMoney(cash)}</strong><small>Liquidez · no se proyecta</small></div></article>
+            <article className="metric-card"><div className="metric-icon invest-icon"><Icon name="trend" size={19} /></div><div><span>Inversiones</span><strong>{formatMoney(gbm)}</strong><small>{accounts.filter((account) => account.group === "investment").length} {accounts.filter((account) => account.group === "investment").length === 1 ? "cuenta" : "cuentas"} · largo plazo</small></div></article>
           </section>
         </div>
 
@@ -1018,7 +1099,7 @@ export default function Home() {
 
           <aside className="side-column">
             <section className="panel goal-card">
-              <div className="panel-heading compact"><div><span className="eyebrow">OBJETIVO PRINCIPAL</span><h2>Reserva de emergencia</h2></div></div>
+              <div className="panel-heading compact"><div><span className="eyebrow">OBJETIVO PRINCIPAL</span><h2>Reserva de emergencia</h2></div><span className="goal-icon" aria-hidden="true"><Icon name="target" size={21} /></span></div>
               <div className="goal-content"><GoalRing progress={reserveProgress} /><div className="goal-copy"><strong>{formatMoney(reserve)}</strong><span>de {formatMoney(target)}</span><small>Te faltan {formatMoney(Math.max(target - reserve, 0))}</small></div></div>
               <div className="progress-track"><span style={{ width: `${reserveProgress}%` }} /></div>
               <div className="goal-fields">
@@ -1135,8 +1216,17 @@ export default function Home() {
           <p className="backup-status" aria-live="polite">{backupStatus || (lastSavedAt ? `Último guardado local: ${new Date(lastSavedAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}` : "Guardado automático activo.")}</p>
         </section>
 
-        <footer className="footer"><a className="brand footer-brand" href="#inicio"><BrandMark /><span>Nexo</span></a><p>Tu panorama financiero, claro y en un solo lugar.</p><button className="footer-backup" onClick={openBackupPanel}>Respaldar datos</button><span>Uso personal · MXN</span></footer>
+        <footer className="footer"><a className="brand footer-brand" href="#inicio"><BrandMark /><span className="brand-text">Nexo</span></a><p>Tu panorama financiero, claro y en un solo lugar.</p><button className="footer-backup" onClick={openBackupPanel}>Respaldar datos</button><span>Uso personal · MXN</span></footer>
       </div>
+      </div>
+
+      <nav className="tab-bar" aria-label="Navegación de secciones">
+        {navItems.map((item) => (
+          <a key={item.id} className={activeSection === item.id ? "active" : ""} aria-current={activeSection === item.id ? "true" : undefined} href={`#${item.id}`}>
+            <Icon name={item.icon} size={21} /><span>{item.label}</span>
+          </a>
+        ))}
+      </nav>
 
       {editing && (
         <div className="modal-backdrop">

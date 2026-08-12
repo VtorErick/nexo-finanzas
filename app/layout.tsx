@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -55,7 +56,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <meta property="og:image:height" content="630" />
         <meta name="twitter:image" content={`${origin}/og.png`} />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+      <body className={`${inter.variable} ${geistMono.variable}`}>{children}</body>
     </html>
   );
 }
