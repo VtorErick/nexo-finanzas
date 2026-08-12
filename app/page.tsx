@@ -418,7 +418,9 @@ function ProjectionChart({
   const pathFor = (key: "reserve" | "gbm" | "realTotal") =>
     points.map((point, index) => `${index ? "L" : "M"} ${x(point.month).toFixed(2)} ${y(point[key]).toFixed(2)}`).join(" ");
   const hoveredPoint = hoveredMonth === null ? null : points[hoveredMonth];
-  const labelStep = years <= 10 ? 1 : years <= 20 ? 2 : 5;
+  const labelStep = compactChart
+    ? years <= 5 ? 1 : years <= 12 ? 2 : years <= 20 ? 4 : 5
+    : years <= 10 ? 1 : years <= 20 ? 2 : 5;
   const xLabels = Array.from({ length: years + 1 }, (_, year) => year)
     .filter((year) => year === 0 || year === years || year % labelStep === 0)
     .map((year) => (
@@ -492,40 +494,6 @@ function ProjectionChart({
             <small>Total nominal {formatMoney(hoveredPoint.reserve + hoveredPoint.gbm)}</small>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function Calendar({ month, onMonthChange, events, today }: { month: Date; onMonthChange: (delta: number) => void; events: CalendarOccurrence[]; today: Date }) {
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const firstDay = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
-  const eventMap = new Map<number, CalendarOccurrence[]>();
-  events.forEach((event) => {
-    const eventDate = new Date(`${event.date}T12:00:00`);
-    if (eventDate.getFullYear() !== year || eventDate.getMonth() !== monthIndex) return;
-    const day = eventDate.getDate();
-    eventMap.set(day, [...(eventMap.get(day) ?? []), event]);
-  });
-  const monthName = month.toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-  const cells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
-
-  return (
-    <div className="calendar-card">
-      <div className="calendar-toolbar">
-        <button onClick={() => onMonthChange(-1)} aria-label="Mes anterior">‹</button>
-        <strong>{monthName.charAt(0).toUpperCase() + monthName.slice(1)}</strong>
-        <button onClick={() => onMonthChange(1)} aria-label="Mes siguiente">›</button>
-      </div>
-      <div className="weekday-row">{["L", "M", "M", "J", "V", "S", "D"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
-      <div className="calendar-grid">
-        {cells.map((day, index) => (
-          <div key={`${day}-${index}`} className={`calendar-day ${day === today.getDate() && monthIndex === today.getMonth() && year === today.getFullYear() ? "today" : ""}`}>
-            {day && <><b>{day}</b><div className="day-dots">{(eventMap.get(day) ?? []).slice(0, 3).map((event) => <i key={event.occurrenceKey} className={`dot-${event.tone}`} title={`${event.title} · ${recurrenceLabel(event.recurrence)}`} />)}</div></>}
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -912,7 +880,11 @@ export default function Home() {
   }
 
   function openBackupPanel() {
-    window.requestAnimationFrame(() => document.querySelector("#respaldo")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    window.requestAnimationFrame(() => {
+      const backupPanel = document.querySelector<HTMLDetailsElement>("#respaldo");
+      if (backupPanel) backupPanel.open = true;
+      backupPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function exportBackup() {
@@ -1092,7 +1064,7 @@ export default function Home() {
 
           <section className="overview-grid" aria-label="Resumen financiero">
             <article className="net-worth-card"><div className="card-label"><span>Patrimonio total</span><span className="soft-badge">{accounts.length} cuentas</span></div><strong className="hero-amount">{formatMoney(total)}</strong><div className="net-worth-foot"><span><i className="status-dot green" /> {dataMode === "example" ? "Datos de ejemplo" : "Saldos al día"}</span><small>{dataMode === "example" ? "Montos ficticios para explorar" : "Datos guardados en este dispositivo"}</small></div></article>
-            <article className="metric-card"><div className="metric-icon reserve-icon"><Icon name="shield" size={19} /></div><div><span>Fondo de emergencia</span><strong>{formatMoney(reserve)}</strong><small>{reserveProgress}% de la meta</small></div></article>
+            <article className="metric-card"><div className="metric-icon reserve-icon"><Icon name="shield" size={19} /></div><div><span>Reserva</span><strong>{formatMoney(reserve)}</strong><small>{reserveProgress}% de la meta</small></div></article>
             <article className="metric-card"><div className="metric-icon cash-icon"><Icon name="cash" size={19} /></div><div><span>Disponible</span><strong>{formatMoney(cash)}</strong><small>Liquidez · no se proyecta</small></div></article>
             <article className="metric-card"><div className="metric-icon invest-icon"><Icon name="trend" size={19} /></div><div><span>Inversiones</span><strong>{formatMoney(gbm)}</strong><small>{accounts.filter((account) => account.group === "investment").length} {accounts.filter((account) => account.group === "investment").length === 1 ? "cuenta" : "cuentas"} · largo plazo</small></div></article>
           </section>
@@ -1115,7 +1087,7 @@ export default function Home() {
             </section>
           </div>
 
-          <aside className="side-column">
+          <aside className="side-column" hidden>
             <section className="panel goal-card">
               <div className="panel-heading compact"><div><span className="eyebrow">OBJETIVO PRINCIPAL</span><h2>Reserva de emergencia</h2></div><span className="goal-icon" aria-hidden="true"><Icon name="target" size={21} /></span></div>
               <div className="goal-content"><GoalRing progress={reserveProgress} /><div className="goal-copy"><strong>{formatMoney(reserve)}</strong><span>de {formatMoney(target)}</span><small>Te faltan {formatMoney(Math.max(target - reserve, 0))}</small></div></div>
@@ -1134,7 +1106,7 @@ export default function Home() {
         </section>
 
         <section id="agenda" className="section-wrap movements-section">
-          <div className="section-heading"><div><span className="eyebrow">MOVIMIENTOS</span><h2>Tu agenda financiera</h2><p>Organiza ingresos, gastos, transferencias y aportaciones. Los movimientos que elijas también pueden alimentar la proyección.</p></div><button className="secondary-button" onClick={() => { if (eventEditorOpen) { setEventEditorOpen(false); setEditingEventId(null); } else { openNewEvent(); } }}>{eventEditorOpen ? "Cancelar" : "+ Agregar movimiento"}</button></div>
+          <div className="section-heading"><div><span className="eyebrow">MOVIMIENTOS</span><h2>Movimientos planeados</h2><p>Programa lo que viene y decide qué aportaciones entran en la proyección.</p></div><button className="secondary-button" onClick={() => { if (eventEditorOpen) { setEventEditorOpen(false); setEditingEventId(null); } else { openNewEvent(); } }}>{eventEditorOpen ? "Cancelar" : "+ Agregar movimiento"}</button></div>
           {eventEditorOpen && (
             <div className="event-form panel">
               <div className="event-form-head"><div><span className="editing-badge">{editingEventId === null ? "NUEVO" : "EDITANDO SERIE"}</span><strong>Configura el movimiento</strong></div><span>{eventDraft.recurrence === "none" ? "Una sola fecha" : recurrenceLabel(eventDraft.recurrence)}</span></div>
@@ -1147,7 +1119,6 @@ export default function Home() {
                 <label>Repetición<select value={eventDraft.recurrence} onChange={(event) => setEventDraft((current) => ({ ...current, recurrence: event.target.value as EventRecurrence, recurrenceEnd: event.target.value === "none" ? null : current.recurrenceEnd }))}><option value="none">No se repite</option><option value="weekly">Cada semana</option><option value="monthly">Cada mes</option><option value="annual">Cada año</option></select></label>
                 {eventDraft.recurrence !== "none" && <label>Termina <span className="optional">opcional</span><input type="date" min={eventDraft.date} value={eventDraft.recurrenceEnd ?? ""} onChange={(event) => setEventDraft((current) => ({ ...current, recurrenceEnd: event.target.value || null }))} /><small>Vacío = sin fecha final</small></label>}
                 {eventDraft.kind !== "transfer" && <label>Destino en proyección<select value={eventDraft.destination} onChange={(event) => setEventDraft((current) => ({ ...current, destination: event.target.value as ProjectionDestination, includeInProjection: event.target.value !== "none" }))}><option value="none">No incluir</option><option value="cetes">Reserva / CETES</option><option value="gbm">Inversión</option></select></label>}
-                <label>Color<select value={eventDraft.tone} onChange={(event) => setEventDraft((current) => ({ ...current, tone: event.target.value as EventTone }))}><option value="blue">Azul</option><option value="green">Verde</option><option value="orange">Naranja</option><option value="red">Rojo</option></select></label>
               </div>
               <div className="event-form-actions"><small>{eventDraft.recurrence === "none" ? "Se agregará un solo movimiento." : `${recurrenceLabel(eventDraft.recurrence)} desde ${eventDraft.date}${eventDraft.recurrenceEnd ? ` hasta ${eventDraft.recurrenceEnd}` : ", sin fecha final"}.`}{eventDraft.includeInProjection ? " Su monto se reflejará en la proyección." : ""}</small><button className="primary-button" disabled={!eventDraft.title.trim() || !eventDraft.date} onClick={saveEvent}>{editingEventId === null ? "Guardar movimiento" : "Guardar cambios"}</button></div>
             </div>
@@ -1155,27 +1126,26 @@ export default function Home() {
           {removedEvent && <div className="undo-banner" role="status"><span>Movimiento eliminado.</span><button onClick={undoEventRemoval}>Deshacer</button><button aria-label="Cerrar aviso" onClick={() => setRemovedEvent(null)}>×</button></div>}
           <div className="agenda-grid">
             <div className="events-card">
-              <div className="events-head"><strong>{monthNames[calendarMonth.getMonth()]}</strong><span>{visibleEvents.length} movimiento{visibleEvents.length === 1 ? "" : "s"}</span></div>
+              <div className="events-head"><div className="events-period"><button onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} aria-label="Mes anterior">‹</button><strong>{monthNames[calendarMonth.getMonth()]}</strong><button onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} aria-label="Mes siguiente">›</button></div><span>{visibleEvents.length} movimiento{visibleEvents.length === 1 ? "" : "s"}</span></div>
               {visibleEvents.length === 0 ? <div className="events-empty">No hay eventos en este mes.</div> : visibleEvents.map((event) => {
                 const eventDay = Number(event.date.slice(-2));
                 const isCompleted = event.date < todayIso || event.completedDates.includes(event.date);
                 return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatMoney(event.numericAmount) : "Sin monto"}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isCompleted ? "Completado" : "Pendiente"}</span><div>{event.date >= todayIso && <button onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Reabrir" : "Hecho"}</button>}{event.recurrence !== "none" && event.date >= todayIso && <button onClick={() => skipOccurrence(event)}>Omitir</button>}<button onClick={() => editEvent(event.sourceId)}>Editar</button><button className="danger-link" aria-label={`${event.recurrence === "none" ? "Eliminar" : "Eliminar serie"} ${event.title}`} onClick={() => removeEventSeries(event.sourceId)}>{event.recurrence === "none" ? "Eliminar" : "Eliminar serie"}</button></div></div></div>;
               })}
             </div>
-            <Calendar month={calendarMonth} onMonthChange={(delta) => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1))} events={visibleEvents} today={today} />
           </div>
         </section>
 
         <section id="proyeccion" className="section-wrap projection-section">
           <div className="section-heading projection-heading">
             <div><span className="eyebrow">PROYECCIÓN</span><h2>Crecimiento y poder adquisitivo</h2><p>Compara en una sola vista los valores nominales y lo que realmente representarían en pesos de hoy.</p></div>
-            <div className="projection-controls"><div className="horizon-presets" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button className={years === period ? "active" : ""} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control"><button aria-label="Reducir horizonte" onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button aria-label="Aumentar horizonte" onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button><input aria-label="Horizonte de proyección" type="range" min="1" max={MAX_YEARS} value={years} onChange={(event) => setYears(Number(event.target.value))} /></div></div>
+            <div className="projection-controls"><div className="horizon-presets" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button className={years === period ? "active" : ""} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" aria-label="Horizonte de proyección"><button aria-label="Reducir horizonte" onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite"><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button aria-label="Aumentar horizonte" onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div></div>
           </div>
 
           <div className="projection-grid">
             <div className="panel projection-card comparison-view">
               <div className="projection-summary-head"><div><span>Resultado al final del horizonte</span><strong>{years} {years === 1 ? "año" : "años"}</strong></div><span className="projection-badge success">3 líneas comparables</span></div>
-              <div className="projection-story" aria-label="Cómo se forma la proyección">
+              <div className="projection-story" hidden aria-label="Cómo se forma la proyección">
                 <div><span>Parte de hoy</span><strong>{formatMoney(projectedStartingTotal)}</strong><small>{formatMoney(reserve)} reserva + {formatMoney(gbm)} inversión</small></div>
                 <i aria-hidden="true">+</i>
                 <div><span>Aportaciones netas</span><strong>{formatMoney(projection.netContributions)}</strong><small>{projectedEventSeries} {projectedEventSeries === 1 ? "serie" : "series"} de agenda + {activeExtras.length} {activeExtras.length === 1 ? "escenario" : "escenarios"}</small></div>
@@ -1201,6 +1171,16 @@ export default function Home() {
               <label className="rate-field"><span>Reserva anual<small>Instrumentos de corto plazo</small></span><span className="rate-input"><input type="text" inputMode="decimal" value={reserveRateText} onChange={(event) => setReserveRateText(event.target.value)} onBlur={() => setReserveRateText(String(reserveRate))} /><b>%</b></span></label>
               <label className="rate-field"><span>Inversión anual<small>Cuenta de largo plazo</small></span><span className="rate-input"><input type="text" inputMode="decimal" value={gbmRateText} onChange={(event) => setGbmRateText(event.target.value)} onBlur={() => setGbmRateText(String(gbmRate))} /><b>%</b></span></label>
               <label className="rate-field inflation-rate-field"><span>Inflación anual<small>Convierte el total a pesos de hoy</small></span><span className="rate-input"><input aria-label="Inflación anual estimada" type="text" inputMode="decimal" value={inflationRateText} onChange={(event) => setInflationRateText(event.target.value)} onBlur={() => setInflationRateText(String(inflationRate))} /><b>%</b></span></label>
+              <details className="projection-settings">
+                <summary>Ajustar meta de reserva</summary>
+                <div className="goal-fields">
+                  <label className="target-field"><span>Gasto esencial mensual <em>solo sirve como referencia</em></span><div><b>$</b><input aria-label="Gasto esencial mensual para calcular meses de cobertura" aria-describedby="expense-purpose" type="text" inputMode="decimal" value={monthlyExpensesText} onChange={(event) => setMonthlyExpensesText(event.target.value)} onBlur={() => setMonthlyExpensesText(formatNumberInput(monthlyExpenses))} /></div></label>
+                  <p className="field-help" id="expense-purpose">Calcula una referencia de cobertura de 3 a 6 meses. No se suma al patrimonio ni a la proyección.</p>
+                  <label className="target-field"><span>Meta personalizada</span><div><b>$</b><input aria-label="Meta del fondo de emergencia" type="text" inputMode="decimal" value={targetText} onChange={(event) => setTargetText(event.target.value)} onBlur={() => setTargetText(formatNumberInput(target))} /></div></label>
+                  <div className="coverage-card"><span>Cobertura actual</span><strong>{coverageMonths === null ? "—" : `${coverageMonths.toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses`}</strong><small>{coverageMonths === null ? "Agrega tu gasto esencial para calcularla." : coverageMonths >= 6 ? "Supera la referencia amplia de 6 meses." : coverageMonths >= 3 ? "Dentro de la referencia habitual de 3 a 6 meses." : "Por debajo de la referencia inicial de 3 meses."}</small></div>
+                  <div className="goal-suggestions"><button onClick={() => setTargetText(formatNumberInput(recommendedTargetMin))}>Usar 3 meses</button><button onClick={() => setTargetText(formatNumberInput(recommendedTargetMax))}>Usar 6 meses</button></div>
+                </div>
+              </details>
               <div className="assumptions-result"><span>Poder adquisitivo al final</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>El total nominal es {formatMoney(lastNominalTotal)}. La diferencia de {formatMoney(inflationImpact)} representa el efecto acumulado de una inflación de {inflationRate}% anual.</small></div>
             </aside>
           </div>
@@ -1226,15 +1206,18 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="respaldo" className="panel backup-panel" aria-labelledby="backup-title">
-          <div><span className="eyebrow">EXCEL Y RESPALDO</span><h2 id="backup-title">Un respaldo que sí puedes revisar</h2><p>Nexo crea un libro de Excel profesional, legible y listo para restaurarse en otro navegador.</p><p className="backup-includes"><strong>Incluye 6 hojas:</strong> resumen ejecutivo, cuentas, movimientos, escenarios, capturas visuales y configuración de restauración.</p></div>
-          <div className="backup-actions"><button className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando Excel…" : "Descargar Excel (.xlsx)"}</button><button className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar Excel</button></div>
+        <details id="respaldo" className="panel backup-panel">
+          <summary className="backup-summary"><span className="backup-summary-copy"><span className="eyebrow">RESPALDO</span><strong>Guardar o restaurar tus datos</strong><small>Excel para conservarlos o moverlos a otro navegador</small></span><span className="backup-summary-action">Abrir <b aria-hidden="true">+</b></span></summary>
+          <div className="backup-body">
+            <div className="backup-copy"><h2 id="backup-title">Una copia clara de tus finanzas</h2><p>Descarga un Excel con tus cuentas, movimientos y proyecciones. Después puedes importarlo para continuar en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> resumen, cuentas, movimientos, escenarios y configuración de restauración.</p></div>
+            <div className="backup-actions"><button className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando Excel…" : "Descargar Excel"}</button><button className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar Excel</button></div>
           <input ref={backupInputRef} hidden type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" onChange={importBackup} />
-          <div className="backup-reset"><div><strong>Restablecer datos de ejemplo</strong><p>Reemplaza toda la información guardada por cuentas y movimientos ficticios. Esta acción no modifica los archivos de Excel que ya descargaste.</p></div><button className="danger-button" disabled={backupBusy} onClick={resetToExampleData}>Restablecer datos</button></div>
-          <p className="backup-status" aria-live="polite">{backupStatus || (lastSavedAt ? `Último guardado local: ${new Date(lastSavedAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}` : "Guardado automático activo.")}</p>
-        </section>
+            <p className="backup-status" aria-live="polite">{backupStatus || (lastSavedAt ? `Último guardado local: ${new Date(lastSavedAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}` : "Guardado automático activo.")}</p>
+            <details className="backup-advanced"><summary>Opciones avanzadas</summary><div className="backup-reset"><div><strong>Restablecer datos de ejemplo</strong><p>Reemplaza la información guardada por cuentas y movimientos ficticios. No modifica los archivos de Excel que ya descargaste.</p></div><button className="danger-button" disabled={backupBusy} onClick={resetToExampleData}>Restablecer datos</button></div></details>
+          </div>
+        </details>
 
-        <footer className="footer"><a className="brand footer-brand" href="#inicio"><BrandMark /><span className="brand-text">Nexo</span></a><p>Tu panorama financiero, claro y en un solo lugar.</p><button className="footer-backup" onClick={openBackupPanel}>Respaldar datos</button><span>Uso personal · MXN</span></footer>
+        <footer className="footer"><a className="brand footer-brand" href="#inicio"><BrandMark /><span className="brand-text">Nexo</span></a><p>Tu panorama financiero, claro y en un solo lugar.</p><button className="footer-backup" onClick={openBackupPanel}>Abrir respaldo</button><span>Uso personal · MXN</span></footer>
       </div>
       </div>
 
