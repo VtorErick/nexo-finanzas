@@ -7,8 +7,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host?.includes("localhost") ? "http" : "https");
   const origin = host ? `${protocol}://${host}` : "http://localhost:3000";
-  const title = "Nexo · Tu panorama financiero";
-  const description = "Organiza tus saldos, metas y proyecciones financieras en un solo lugar.";
+  const title = "Nexo · Tu dinero, en perspectiva";
+  const description = "Cuentas, actividad, metas y proyecciones en una experiencia financiera clara, privada y fácil de usar.";
 
   return {
     title,
@@ -19,13 +19,13 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       locale: "es_MX",
-      images: [{ url: `${origin}/og.png`, width: 1200, height: 630, alt: "Nexo · Tu panorama financiero, claro." }],
+      images: [{ url: `${origin}/og-nexo-2026.png`, width: 1729, height: 910, alt: "Nexo · Tu dinero, en perspectiva." }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [`${origin}/og.png`],
+      images: [`${origin}/og-nexo-2026.png`],
     },
   };
 }
@@ -39,10 +39,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="es">
       <head>
-        <meta property="og:image" content={`${origin}/og.png`} />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
-        <meta name="twitter:image" content={`${origin}/og.png`} />
+        <meta property="og:image" content={`${origin}/og-nexo-2026.png`} />
+        <meta property="og:image:width" content="1729" />
+        <meta property="og:image:height" content="910" />
+        <meta name="twitter:image" content={`${origin}/og-nexo-2026.png`} />
       </head>
       <body>{children}</body>
     </html>

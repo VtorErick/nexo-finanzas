@@ -30,15 +30,16 @@ test("server-renders the Nexo financial dashboard", async () => {
 
   const html = await response.text();
   assert.match(html, /<html[^>]*lang="es"/i);
-  assert.match(html, /<title>Nexo · Tu panorama financiero<\/title>/i);
-  assert.match(html, /Buenos días\./);
+  assert.match(html, /<title>Nexo · Tu dinero, en perspectiva<\/title>/i);
+  assert.match(html, /Tu dinero, en perspectiva\./);
   assert.match(html, /Patrimonio total/);
   assert.match(html, /Modo ejemplo/);
   assert.match(html, /Cuenta diaria/);
-  assert.match(html, /Montos ficticios para explorar/);
+  assert.match(html, /Flujo de efectivo/);
+  assert.match(html, /El pulso de tu dinero/);
   assert.match(html, /Reserva/);
   assert.match(html, /Crecimiento y poder adquisitivo/);
-  assert.match(html, /https:\/\/nexo\.test\/og\.png/i);
+  assert.match(html, /https:\/\/nexo\.test\/og-nexo-2026\.png/i);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/i);
 });
 
@@ -49,6 +50,8 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /aria-label="Navegación principal"/);
   assert.match(html, /class="skip-link" href="#contenido">Saltar al contenido/);
   assert.match(html, /aria-label="Resumen financiero"/);
+  assert.match(html, /aria-label="Ingresos y gastos de los últimos seis meses"/);
+  assert.match(html, /aria-label="Filtrar actividad"/);
   assert.match(html, /aria-label="Horizonte de proyección"/);
   assert.match(html, /aria-label="Mes anterior"/);
   assert.match(html, /aria-label="Mes siguiente"/);
@@ -61,6 +64,7 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /Abrir respaldo/);
   assert.match(html, /Ajustar meta de reserva/);
   assert.match(html, /Guardar o restaurar tus datos/);
+  assert.match(html, /Privacidad local/);
 });
 
 test("includes the extended planning controls", async () => {
@@ -78,10 +82,21 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /function getMexicoToday\(/);
   assert.doesNotMatch(source, /const REFERENCE_DATE/);
   assert.match(source, /type MovementKind = "expense" \| "income" \| "transfer" \| "contribution"/);
+  assert.match(source, /type TransactionKind = "expense" \| "income" \| "transfer"/);
+  assert.match(source, /function saveTransaction\(\)/);
+  assert.match(source, /function adjustAccountsForTransaction\(/);
+  assert.match(source, /Registra un movimiento/);
   assert.match(source, /Cada semana/);
   assert.match(source, /Cada mes/);
   assert.match(source, /Cada año/);
-  assert.match(source, /Patrimonio en pesos de hoy/);
+  assert.match(source, /Neto liquidable en pesos de hoy/);
+  assert.match(source, /const RESERVE_RETURN = 6\.5/);
+  assert.match(source, /const GBM_RETURN = 9/);
+  assert.match(source, /const TRADING_MX_COMMISSION = 0\.25/);
+  assert.match(source, /const CAPITAL_GAINS_TAX = 10/);
+  assert.match(source, /Math\.pow\(1 \+ Math\.max\(-99\.99, annualRate\) \/ 100, 1 \/ 12\) - 1/);
+  assert.match(source, /Comisión Trading MX/);
+  assert.match(source, /ISR estimado sobre ganancia/);
   assert.match(source, /className="chart-line real-stroke"/);
   assert.match(source, /Guardar escenario/);
   assert.match(source, /Cambios sin guardar/);
@@ -122,6 +137,10 @@ test("defines accessible light and dark themes with distinguishable chart series
   assert.match(css, /\.marker-real/);
   assert.match(css, /@keyframes ambient-one/);
   assert.match(css, /\.movements-section \.calendar-card \{ display: none/);
+  assert.match(css, /Nexo · Product system 2026/);
+  assert.match(css, /\.overview-insight-grid/);
+  assert.match(css, /\.transaction-modal/);
+  assert.match(css, /\[hidden\] \{ display: none !important; \}/);
 });
 
 test("defines a privacy-safe static build for Vercel", async () => {
@@ -140,6 +159,7 @@ test("builds a formatted and reimportable Excel workbook", async () => {
 
   assert.match(source, /workbook\.addWorksheet\("Resumen"/);
   assert.match(source, /workbook\.addWorksheet\("Cuentas"/);
+  assert.match(source, /workbook\.addWorksheet\("Actividad"/);
   assert.match(source, /workbook\.addWorksheet\("Movimientos"/);
   assert.match(source, /workbook\.addWorksheet\("Escenarios"/);
   assert.match(source, /workbook\.addWorksheet\("Capturas"/);
@@ -150,6 +170,8 @@ test("builds a formatted and reimportable Excel workbook", async () => {
   assert.match(source, /workbook\.addImage/);
   assert.doesNotMatch(source, /sheet\.addTable/);
   assert.match(source, /makeExcelCompatible/);
+  assert.match(source, /ComisionTradingMX/);
+  assert.match(source, /ImpuestoGanancia/);
   assert.match(source, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
   assert.doesNotMatch(source, /JSON\.stringify|JSON\.parse/);
 });
@@ -172,9 +194,10 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
         { id: "a2", label: "Inversión de prueba", amount: 40000, rate: "11%", group: "investment", note: "Dato ficticio" },
       ],
       emergencyIds: ["a1"], years: 15, target: 180000, monthlyExpenses: 30000,
-      reserveRate: 10, investmentRate: 11, inflationRate: 3.75,
+      reserveRate: 6.5, investmentRate: 9, inflationRate: 4, brokerFee: 0.25, capitalGainsTax: 10,
       extras: [{ id: 1, enabled: true, amount: 2500, recurring: true, frequency: "monthly", destination: "gbm", startMonth: 1, endMonth: null, monthOfYear: 1, oneTimeMonth: 1 }],
       events: [{ id: 1, date: "2026-08-15", title: "Movimiento de prueba", amount: "$3,000", detail: "Dato ficticio", numericAmount: 3000, tone: "green", kind: "contribution", destination: "gbm", includeInProjection: true, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [] }],
+      transactions: [{ id: "tx-1", date: "2026-08-13", title: "Nómina de prueba", amount: 18000, kind: "income", accountId: "a1", toAccountId: null, category: "Trabajo", note: "Dato ficticio" }],
     };
     const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+5Q2dAAAAAElFTkSuQmCC";
     const screenshots = ["Resumen", "Cuentas", "Proyección"].map((title) => ({ title, dataUrl: image, width: 1, height: 1, extension: "png" }));
@@ -188,8 +211,9 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
     assert.match(styles, /rgb="17365D"/);
     assert.doesNotMatch(styles, /rgb="(?:0000FF|0F625A)"/);
     assert.match(await archive.file("xl/worksheets/sheet2.xml").async("string"), /<autoFilter ref="A5:G7"\/>/);
-    assert.match(await archive.file("xl/worksheets/sheet3.xml").async("string"), /<autoFilter ref="A5:M6"\/>/);
-    assert.match(await archive.file("xl/worksheets/sheet4.xml").async("string"), /<autoFilter ref="A5:J6"\/>/);
+    assert.match(await archive.file("xl/worksheets/sheet3.xml").async("string"), /<autoFilter ref="A5:I6"\/>/);
+    assert.match(await archive.file("xl/worksheets/sheet4.xml").async("string"), /<autoFilter ref="A5:M6"\/>/);
+    assert.match(await archive.file("xl/worksheets/sheet5.xml").async("string"), /<autoFilter ref="A5:J6"\/>/);
     const drawing = await archive.file("xl/drawings/drawing1.xml").async("string");
     assert.doesNotMatch(drawing, /<a:ext cx="0" cy="0"\/>/);
     assert.doesNotMatch(drawing, /a16:creationId/);
@@ -199,6 +223,8 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
     assert.equal(imported.accounts.length, 2);
     assert.equal(imported.events.length, 1);
     assert.equal(imported.extras.length, 1);
+    assert.equal(imported.transactions.length, 1);
+    assert.equal(imported.transactions[0].title, "Nómina de prueba");
     assert.equal(imported.accounts[0].label, "Cuenta de prueba");
   } finally {
     await unlink(temporaryUrl).catch(() => {});

@@ -40,8 +40,20 @@ export type WorkbookExtra = {
   oneTimeMonth: number;
 };
 
+export type WorkbookTransaction = {
+  id: string;
+  date: string;
+  title: string;
+  amount: number;
+  kind: "expense" | "income" | "transfer";
+  accountId: string;
+  toAccountId: string | null;
+  category: string;
+  note: string;
+};
+
 export type WorkbookBackup = {
-  dataMode: "example" | "imported";
+  dataMode: "example" | "personal" | "imported";
   accounts: WorkbookAccount[];
   emergencyIds: string[];
   years: number;
@@ -50,8 +62,11 @@ export type WorkbookBackup = {
   reserveRate: number;
   investmentRate: number;
   inflationRate: number;
+  brokerFee: number;
+  capitalGainsTax: number;
   extras: WorkbookExtra[];
   events: WorkbookEvent[];
+  transactions: WorkbookTransaction[];
 };
 
 export type WorkbookScreenshot = {
@@ -113,6 +128,18 @@ function kindValue(value: unknown): WorkbookEvent["kind"] {
   if (value === "Ingreso") return "income";
   if (value === "Aportación") return "contribution";
   return "transfer";
+}
+
+function transactionKindLabel(kind: WorkbookTransaction["kind"]) {
+  if (kind === "expense") return "Gasto";
+  if (kind === "income") return "Ingreso";
+  return "Transferencia";
+}
+
+function transactionKindValue(value: unknown): WorkbookTransaction["kind"] {
+  if (textValue(value) === "Ingreso") return "income";
+  if (textValue(value) === "Transferencia") return "transfer";
+  return "expense";
 }
 
 function recurrenceLabel(value: WorkbookEvent["recurrence"]) {
@@ -269,8 +296,10 @@ function addSummarySheet(workbook: import("exceljs").Workbook, data: WorkbookBac
     ["Gasto esencial mensual (base para 3–6 meses)", data.monthlyExpenses, CURRENCY_FORMAT],
     ["Horizonte de proyección", data.years, '0 "años"'],
     ["Rendimiento anual de reserva", data.reserveRate / 100, RATE_FORMAT],
-    ["Rendimiento anual de inversión", data.investmentRate / 100, RATE_FORMAT],
+    ["Rendimiento anual de VOO en MXN", data.investmentRate / 100, RATE_FORMAT],
     ["Inflación anual estimada", data.inflationRate / 100, RATE_FORMAT],
+    ["Comisión Trading MX", data.brokerFee / 100, RATE_FORMAT],
+    ["ISR estimado sobre ganancia", data.capitalGainsTax / 100, RATE_FORMAT],
   ];
   assumptions.forEach(([label, value, numberFormat], index) => {
     const row = 10 + index;
@@ -281,6 +310,10 @@ function addSummarySheet(workbook: import("exceljs").Workbook, data: WorkbookBac
     const valueCell = sheet.getCell(`E${row}`);
     valueCell.value = value;
     valueCell.numFmt = numberFormat;
+    if (label === "Rendimiento anual de VOO en MXN") valueCell.note = "Supuesto editable. VOO sigue al S&P 500 en USD; este porcentaje modela una expectativa total expresada en MXN e incorpora, de forma simplificada, mercado y tipo de cambio. Fuente de referencia: https://workplace.vanguard.com/assets/corp/fund_communications/pdf_publish/us-products/fact-sheet/F0968.pdf";
+    if (label === "Inflación anual estimada") valueCell.note = "Supuesto editable. Referencia macroeconómica: INEGI INPC, https://www.inegi.org.mx/contenidos/saladeprensa/boletines/2026/inpc/inpc_2q2026_07.pdf";
+    if (label === "Comisión Trading MX") valueCell.note = "Supuesto editable. GBM publica una comisión de corretaje de 0.25% para montos operados de hasta $1,000,000 MXN: https://gbm.com/faqs/que-comisiones-cobran-al-invertir-en-gbm";
+    if (label === "ISR estimado sobre ganancia") valueCell.note = "Supuesto editable. El artículo 129 de la LISR contempla una tasa de 10% sobre ganancias en operaciones elegibles: https://wwwmatnp.sat.gob.mx/articulo/59621/articulo-129. La situación fiscal individual debe validarse con un contador.";
     valueCell.font = { bold: true, color: { argb: COLORS.blue } };
     valueCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F1F6FF" } };
     valueCell.alignment = { horizontal: "right" };
@@ -307,6 +340,28 @@ function addAccountsSheet(workbook: import("exceljs").Workbook, data: WorkbookBa
   styleTableSheet(sheet, [4]);
   sheet.getColumn(7).alignment = { horizontal: "center" };
   sheet.getCell(`D${lastRow}`).numFmt = CURRENCY_FORMAT;
+}
+
+function addTransactionsSheet(workbook: import("exceljs").Workbook, data: WorkbookBackup) {
+  const sheet = workbook.addWorksheet("Actividad");
+  configureSheet(sheet, 5);
+  addSheetTitle(sheet, "Actividad real", "Ingresos, gastos y transferencias que actualizan los saldos de Nexo.", "I");
+  const headers = ["ID", "Fecha", "Concepto", "Tipo", "Monto (MXN)", "Cuenta", "Cuenta destino", "Categoría", "Nota"];
+  const rows = (data.transactions ?? []).map((transaction) => [
+    transaction.id,
+    parseIsoDate(transaction.date),
+    transaction.title,
+    transactionKindLabel(transaction.kind),
+    transaction.amount,
+    transaction.accountId,
+    transaction.toAccountId,
+    transaction.category,
+    transaction.note || null,
+  ]);
+  writeDataGrid(sheet, headers, rows, [null, null, null, "Gasto", 0, null, null, "General", null]);
+  sheet.columns = [{ width: 22 }, { width: 16 }, { width: 30 }, { width: 17 }, { width: 18 }, { width: 24 }, { width: 24 }, { width: 20 }, { width: 36 }];
+  styleTableSheet(sheet, [5], [2]);
+  sheet.getColumn(4).alignment = { horizontal: "center" };
 }
 
 function addEventsSheet(workbook: import("exceljs").Workbook, data: WorkbookBackup) {
@@ -365,7 +420,7 @@ function addConfigSheet(workbook: import("exceljs").Workbook, data: WorkbookBack
   sheet.getRow(5).values = ["Campo", "Valor"];
   const rows: Array<[string, string | number]> = [
     ["Formato", "NEXO_XLSX_BACKUP"],
-    ["Versión", 5],
+    ["Versión", 7],
     ["Exportado", exportedAt.toISOString()],
     ["Modo", data.dataMode],
     ["Horizonte", data.years],
@@ -374,6 +429,8 @@ function addConfigSheet(workbook: import("exceljs").Workbook, data: WorkbookBack
     ["TasaReserva", data.reserveRate],
     ["TasaInversion", data.investmentRate],
     ["Inflacion", data.inflationRate],
+    ["ComisionTradingMX", data.brokerFee],
+    ["ImpuestoGanancia", data.capitalGainsTax],
   ];
   rows.forEach((row, index) => { sheet.getRow(index + 6).values = row; });
   sheet.columns = [{ width: 28 }, { width: 38 }];
@@ -402,9 +459,7 @@ async function captureElement(title: string, element: HTMLElement): Promise<Work
 
 export async function captureNexoScreenshots() {
   const sections = [
-    { title: "Resumen financiero", selector: "#export-overview" },
-    { title: "Cuentas y fondo de emergencia", selector: "#cuentas" },
-    { title: "Proyección financiera", selector: "#proyeccion .projection-grid" },
+    { title: "Vista de Nexo al exportar", selector: "#contenido" },
   ];
   const screenshots: WorkbookScreenshot[] = [];
   for (const section of sections) {
@@ -424,11 +479,12 @@ export async function buildNexoWorkbook(data: WorkbookBackup, screenshots: Workb
   workbook.created = exportedAt;
   workbook.modified = exportedAt;
   workbook.title = "Respaldo financiero Nexo";
-  workbook.subject = "Cuentas, movimientos, escenarios, supuestos y capturas";
+  workbook.subject = "Cuentas, actividad, movimientos planeados, escenarios, supuestos y capturas";
   workbook.company = "Nexo";
   workbook.calcProperties.fullCalcOnLoad = true;
   addSummarySheet(workbook, data, exportedAt);
   addAccountsSheet(workbook, data);
+  addTransactionsSheet(workbook, data);
   addEventsSheet(workbook, data);
   addExtrasSheet(workbook, data);
   addScreenshotsSheet(workbook, screenshots);
@@ -468,6 +524,7 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
   await workbook.xlsx.load(await file.arrayBuffer());
   const configSheet = workbook.getWorksheet("Configuración");
   const accountsSheet = workbook.getWorksheet("Cuentas");
+  const transactionsSheet = workbook.getWorksheet("Actividad");
   const eventsSheet = workbook.getWorksheet("Movimientos");
   const extrasSheet = workbook.getWorksheet("Escenarios");
   if (!configSheet || !accountsSheet || !eventsSheet || !extrasSheet) throw new Error("El libro no contiene todas las hojas de Nexo");
@@ -479,6 +536,19 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
   const accountRows = tableRows(accountsSheet, accountHeaders);
   const accounts = accountRows.map((row) => ({ id: textValue(row[0]), label: textValue(row[1]), group: groupValue(excelValue(row[2])), amount: Math.max(0, numberValue(row[3])), rate: textValue(row[4]), note: textValue(row[5]) }));
   const emergencyIds = accountRows.filter((row) => booleanValue(row[6])).map((row) => textValue(row[0]));
+
+  const transactionHeaders = ["ID", "Fecha", "Concepto", "Tipo", "Monto (MXN)", "Cuenta", "Cuenta destino", "Categoría", "Nota"];
+  const transactions = transactionsSheet ? tableRows(transactionsSheet, transactionHeaders).map((row) => ({
+    id: textValue(row[0]),
+    date: dateValue(row[1]),
+    title: textValue(row[2]),
+    kind: transactionKindValue(excelValue(row[3])),
+    amount: Math.max(0, numberValue(row[4])),
+    accountId: textValue(row[5]),
+    toAccountId: textValue(row[6]) || null,
+    category: textValue(row[7]) || "General",
+    note: textValue(row[8]),
+  })) : [];
 
   const eventHeaders = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
   const events = tableRows(eventsSheet, eventHeaders).map((row) => {
@@ -527,7 +597,10 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
     reserveRate: numberValue(config.get("TasaReserva")),
     investmentRate: numberValue(config.get("TasaInversion")),
     inflationRate: Math.max(0, numberValue(config.get("Inflacion"))),
+    brokerFee: config.has("ComisionTradingMX") ? Math.max(0, numberValue(config.get("ComisionTradingMX"))) : 0.25,
+    capitalGainsTax: config.has("ImpuestoGanancia") ? Math.max(0, numberValue(config.get("ImpuestoGanancia"))) : 10,
     extras,
     events,
+    transactions,
   };
 }
