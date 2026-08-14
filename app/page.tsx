@@ -44,6 +44,9 @@ type DataMode = "example" | "personal" | "imported";
 type Theme = "light" | "dark";
 type AppView = "overview" | "activity" | "accounts" | "plan" | "data";
 type TransactionKind = "expense" | "income" | "transfer";
+type ConfirmationAction =
+  | { kind: "delete-transaction"; transaction: Transaction }
+  | { kind: "reset-example" };
 type Transaction = {
   id: string;
   date: string;
@@ -683,8 +686,10 @@ export default function Home() {
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const [activeView, setActiveView] = useState<AppView>("overview");
+  const [confirmationAction, setConfirmationAction] = useState<ConfirmationAction | null>(null);
   const closeEditorButtonRef = useRef<HTMLButtonElement>(null);
   const closeTransactionButtonRef = useRef<HTMLButtonElement>(null);
+  const closeConfirmationButtonRef = useRef<HTMLButtonElement>(null);
   const editorTriggerRef = useRef<HTMLElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const themeResolvedRef = useRef(false);
@@ -818,8 +823,11 @@ export default function Home() {
           if (typeof data.capitalGainsTaxText === "string") setCapitalGainsTaxText(data.capitalGainsTaxText);
           if (Array.isArray(data.extras)) setExtras(data.extras);
           if (Array.isArray(data.events)) setEvents(data.events.map((event) => normalizeEvent(event)));
-          setTransactions(Array.isArray(data.transactions) ? data.transactions.map((transaction) => normalizeTransaction(transaction)) : []);
-          if (data.dataMode === "imported" || data.dataMode === "personal") setDataMode(data.dataMode);
+          const savedMode = data.dataMode === "imported" || data.dataMode === "personal" ? data.dataMode : "example";
+          setTransactions(Array.isArray(data.transactions)
+            ? data.transactions.map((transaction) => normalizeTransaction(transaction))
+            : savedMode === "example" ? createExampleTransactions(today) : []);
+          setDataMode(savedMode);
           if (typeof data.savedAt === "number") setLastSavedAt(data.savedAt);
         }
       } catch {
@@ -829,7 +837,7 @@ export default function Home() {
       }
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, []);
+  }, [today]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -885,6 +893,21 @@ export default function Home() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [transactionEditorOpen]);
+
+  useEffect(() => {
+    if (!confirmationAction) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirmationAction(null);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    closeConfirmationButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [confirmationAction]);
 
   useEffect(() => {
     if (!toast) return;
@@ -1030,11 +1053,28 @@ export default function Home() {
       showToast("No se puede revertir este ingreso porque la cuenta ya no tiene saldo suficiente.", "warning");
       return;
     }
-    if (!window.confirm(`¿Eliminar “${transaction.title}”? El saldo de sus cuentas se ajustará para revertirlo.`)) return;
-    setAccounts(reversedAccounts);
-    setTransactions((current) => current.filter((item) => item.id !== transaction.id));
-    markDataPersonal();
-    showToast("Movimiento eliminado y saldo revertido.");
+    setConfirmationAction({ kind: "delete-transaction", transaction });
+  }
+
+  function confirmPendingAction() {
+    if (!confirmationAction) return;
+    if (confirmationAction.kind === "delete-transaction") {
+      const transaction = confirmationAction.transaction;
+      const reversedAccounts = adjustAccountsForTransaction(accounts, transaction, -1);
+      if (reversedAccounts.some((account) => account.amount < 0)) {
+        setConfirmationAction(null);
+        showToast("No se puede revertir este ingreso porque la cuenta ya no tiene saldo suficiente.", "warning");
+        return;
+      }
+      setAccounts(reversedAccounts);
+      setTransactions((current) => current.filter((item) => item.id !== transaction.id));
+      markDataPersonal();
+      setConfirmationAction(null);
+      showToast("Movimiento eliminado y saldo revertido.");
+      return;
+    }
+    setConfirmationAction(null);
+    applyExampleReset();
   }
 
   function updateDraftAccount(id: string, patch: Partial<Account>) {
@@ -1171,14 +1211,24 @@ export default function Home() {
 
   function toggleOccurrenceCompleted(event: CalendarOccurrence) {
     setEvents((current) => current.map((item) => item.id === event.sourceId
-      ? { ...item, completedDates: item.completedDates.includes(event.date) ? item.completedDates.filter((date) => date !== event.date) : [...item.completedDates, event.date] }
+      ? {
+        ...item,
+        completedDates: item.completedDates.includes(event.date) ? item.completedDates.filter((date) => date !== event.date) : [...item.completedDates, event.date],
+        skippedDates: item.skippedDates.filter((date) => date !== event.date),
+      }
       : item));
+    markDataPersonal();
   }
 
   function skipOccurrence(event: CalendarOccurrence) {
     setEvents((current) => current.map((item) => item.id === event.sourceId
-      ? { ...item, skippedDates: [...new Set([...item.skippedDates, event.date])] }
+      ? {
+        ...item,
+        completedDates: item.completedDates.filter((date) => date !== event.date),
+        skippedDates: [...new Set([...item.skippedDates, event.date])],
+      }
       : item));
+    markDataPersonal();
   }
 
   function removeEventSeries(id: number) {
@@ -1280,11 +1330,10 @@ export default function Home() {
   }
 
   function resetToExampleData() {
-    const confirmed = window.confirm(
-      "¿Restablecer todos los datos? Se reemplazarán las cuentas, movimientos, escenarios y configuración guardados en este navegador. Descarga un Excel antes si quieres conservarlos.",
-    );
-    if (!confirmed) return;
+    setConfirmationAction({ kind: "reset-example" });
+  }
 
+  function applyExampleReset() {
     const freshAccounts = DEFAULT_ACCOUNTS.map((account) => ({ ...account }));
     const freshEmergencyIds = [...DEFAULT_EMERGENCY_IDS];
     getNexoStorageKeys().forEach((key) => window.localStorage.removeItem(key));
@@ -1462,12 +1511,12 @@ export default function Home() {
         <section id="activity-view" className="view-page activity-view" hidden={activeView !== "activity"}>
           <div className="page-heading">
             <div><span className="eyebrow">ACTIVIDAD</span><h1>El pulso de tu dinero.</h1><p>Registra cada operación una vez; Nexo actualiza saldos, métricas y gráficas.</p></div>
-            <div className="heading-meta"><span className="currency-pill">{transactions.length} operaciones · MXN</span><button className="primary-button" onClick={() => openNewTransaction("expense")}>+ Nuevo movimiento</button></div>
+            <div className="heading-meta"><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="primary-button" onClick={() => openNewTransaction("expense")}>+ Nuevo movimiento</button></div>
           </div>
 
           <section className="activity-stat-grid" aria-label="Resumen del mes">
-            <article><span>Entró este mes</span><strong className="positive-value">+{formatMoney(monthIncome)}</strong><small>{currentMonthTransactions.filter((transaction) => transaction.kind === "income").length} ingresos</small></article>
-            <article><span>Salió este mes</span><strong>−{formatMoney(monthExpense)}</strong><small>{currentMonthTransactions.filter((transaction) => transaction.kind === "expense").length} gastos</small></article>
+            <article><span>Entró este mes</span><strong className="positive-value">+{formatMoney(monthIncome)}</strong><small>{currentMonthTransactions.filter((transaction) => transaction.kind === "income").length} {currentMonthTransactions.filter((transaction) => transaction.kind === "income").length === 1 ? "ingreso" : "ingresos"}</small></article>
+            <article><span>Salió este mes</span><strong>−{formatMoney(monthExpense)}</strong><small>{currentMonthTransactions.filter((transaction) => transaction.kind === "expense").length} {currentMonthTransactions.filter((transaction) => transaction.kind === "expense").length === 1 ? "gasto" : "gastos"}</small></article>
             <article className={monthNet >= 0 ? "is-positive" : "is-negative"}><span>Flujo neto</span><strong>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}</strong><small>{monthNet >= 0 ? "Disponible para tus prioridades" : "Gastaste más de lo que ingresó"}</small></article>
           </section>
 
@@ -1575,8 +1624,9 @@ export default function Home() {
               <div className="events-head"><div className="events-period"><button onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} aria-label="Mes anterior">‹</button><strong>{monthNames[calendarMonth.getMonth()]}</strong><button onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} aria-label="Mes siguiente">›</button></div><span>{visibleEvents.length} movimiento{visibleEvents.length === 1 ? "" : "s"}</span></div>
               {visibleEvents.length === 0 ? <div className="events-empty">No hay eventos en este mes.</div> : visibleEvents.map((event) => {
                 const eventDay = Number(event.date.slice(-2));
-                const isCompleted = event.date < todayIso || event.completedDates.includes(event.date);
-                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatMoney(event.numericAmount) : "Sin monto"}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isCompleted ? "Completado" : "Pendiente"}</span>{event.date >= todayIso && <button className="event-primary-action" onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Reabrir" : "Hecho"}</button>}<details className="movement-menu"><summary aria-label={`Más acciones para ${event.title}`}><span aria-hidden="true">•••</span></summary><div className="movement-menu-items">{event.recurrence !== "none" && event.date >= todayIso && <button onClick={() => skipOccurrence(event)}>Omitir</button>}<button onClick={() => editEvent(event.sourceId)}>Editar</button><button className="danger-link" aria-label={`${event.recurrence === "none" ? "Eliminar" : "Eliminar serie"} ${event.title}`} onClick={() => removeEventSeries(event.sourceId)}>{event.recurrence === "none" ? "Eliminar" : "Eliminar serie"}</button></div></details></div></div>;
+                const isPast = event.date < todayIso;
+                const isCompleted = isPast || event.completedDates.includes(event.date);
+                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatMoney(event.numericAmount) : "Sin monto"}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isPast ? "Fecha pasada" : isCompleted ? "Completado" : "Pendiente"}</span>{!isPast && <button className="event-primary-action" onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Reabrir" : "Hecho"}</button>}<details className="movement-menu"><summary aria-label={`Más acciones para ${event.title}`}><span aria-hidden="true">•••</span></summary><div className="movement-menu-items">{event.recurrence !== "none" && !isPast && !isCompleted && <button onClick={() => skipOccurrence(event)}>Omitir</button>}<button onClick={() => editEvent(event.sourceId)}>Editar</button><button className="danger-link" aria-label={`${event.recurrence === "none" ? "Eliminar" : "Eliminar serie"} ${event.title}`} onClick={() => removeEventSeries(event.sourceId)}>{event.recurrence === "none" ? "Eliminar" : "Eliminar serie"}</button></div></details></div></div>;
               })}
             </div>
           </div>
@@ -1688,6 +1738,25 @@ export default function Home() {
       </nav>
 
       {toast && <div className={`app-toast ${toast.tone}`} role="status"><span aria-hidden="true">{toast.tone === "success" ? "✓" : "!"}</span><p>{toast.message}</p><button aria-label="Cerrar notificación" onClick={() => setToast(null)}>×</button></div>}
+
+      {confirmationAction && (
+        <div className="modal-backdrop confirmation-backdrop">
+          <section className="confirmation-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-description">
+            <span className={`confirmation-mark ${confirmationAction.kind === "reset-example" ? "warning" : "danger"}`} aria-hidden="true">{confirmationAction.kind === "reset-example" ? "!" : "−"}</span>
+            <div className="confirmation-copy">
+              <span className="eyebrow">CONFIRMACIÓN</span>
+              <h2 id="confirmation-title">{confirmationAction.kind === "reset-example" ? "¿Restablecer todos los datos?" : `¿Eliminar “${confirmationAction.transaction.title}”?`}</h2>
+              <p id="confirmation-description">{confirmationAction.kind === "reset-example"
+                ? "Se reemplazarán las cuentas, movimientos, escenarios y configuración guardados en este navegador. Descarga un Excel antes si quieres conservarlos."
+                : "El movimiento desaparecerá del historial y los saldos de sus cuentas se ajustarán para revertirlo."}</p>
+            </div>
+            <div className="confirmation-actions">
+              <button className="secondary-button" ref={closeConfirmationButtonRef} onClick={() => setConfirmationAction(null)}>Conservar datos</button>
+              <button className="danger-button" onClick={confirmPendingAction}>{confirmationAction.kind === "reset-example" ? "Sí, restablecer" : "Sí, eliminar"}</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {transactionEditorOpen && (
         <div className="modal-backdrop transaction-backdrop">

@@ -86,6 +86,14 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /function saveTransaction\(\)/);
   assert.match(source, /function adjustAccountsForTransaction\(/);
   assert.match(source, /Registra un movimiento/);
+  assert.match(source, /role="alertdialog"/);
+  assert.match(source, /setConfirmationAction\(\{ kind: "delete-transaction", transaction \}\)/);
+  assert.match(source, /setConfirmationAction\(\{ kind: "reset-example" \}\)/);
+  assert.doesNotMatch(source, /window\.confirm\(/);
+  assert.match(source, /savedMode === "example" \? createExampleTransactions\(today\) : \[\]/);
+  assert.match(source, /skippedDates: item\.skippedDates\.filter\(\(date\) => date !== event\.date\)/);
+  assert.match(source, /completedDates: item\.completedDates\.filter\(\(date\) => date !== event\.date\)/);
+  assert.match(source, /transactions\.length === 1 \? "operación" : "operaciones"/);
   assert.match(source, /Cada semana/);
   assert.match(source, /Cada mes/);
   assert.match(source, /Cada año/);
@@ -140,6 +148,7 @@ test("defines accessible light and dark themes with distinguishable chart series
   assert.match(css, /Nexo · Product system 2026/);
   assert.match(css, /\.overview-insight-grid/);
   assert.match(css, /\.transaction-modal/);
+  assert.match(css, /\.confirmation-modal/);
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
 });
 
@@ -173,6 +182,7 @@ test("builds a formatted and reimportable Excel workbook", async () => {
   assert.match(source, /ComisionTradingMX/);
   assert.match(source, /ImpuestoGanancia/);
   assert.match(source, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
+  assert.match(source, /sheet\.getCell\(5, column\)\.alignment = \{ horizontal: "right"/);
   assert.doesNotMatch(source, /JSON\.stringify|JSON\.parse/);
 });
 

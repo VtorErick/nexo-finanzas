@@ -232,14 +232,23 @@ function styleTableSheet(sheet: Worksheet, currencyColumns: number[], dateColumn
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber < 6) return;
     row.font = { name: "Aptos", size: 10, color: { argb: COLORS.ink } };
-    row.alignment = { vertical: "top" };
+    row.alignment = { vertical: "top", wrapText: false };
+    row.height = 23;
     row.eachCell((cell) => {
       cell.border = { bottom: { style: "hair", color: { argb: COLORS.line } } };
       if (rowNumber % 2 === 0) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.cream } };
     });
   });
-  currencyColumns.forEach((column) => { sheet.getColumn(column).numFmt = CURRENCY_FORMAT; });
-  dateColumns.forEach((column) => { sheet.getColumn(column).numFmt = "yyyy-mm-dd"; });
+  currencyColumns.forEach((column) => {
+    sheet.getColumn(column).numFmt = CURRENCY_FORMAT;
+    sheet.getColumn(column).alignment = { horizontal: "right", vertical: "top" };
+    sheet.getCell(5, column).alignment = { horizontal: "right", vertical: "middle" };
+  });
+  dateColumns.forEach((column) => {
+    sheet.getColumn(column).numFmt = "yyyy-mm-dd";
+    sheet.getColumn(column).alignment = { horizontal: "center", vertical: "top" };
+    sheet.getCell(5, column).alignment = { horizontal: "center", vertical: "middle" };
+  });
   sheet.autoFilter = { from: "A5", to: sheet.getRow(sheet.rowCount).getCell(sheet.columnCount).address };
 }
 
@@ -336,7 +345,7 @@ function addAccountsSheet(workbook: import("exceljs").Workbook, data: WorkbookBa
   const rows = data.accounts.map((account) => [account.id, account.label, groupLabel(account.group), account.amount, account.rate, account.note, data.emergencyIds.includes(account.id) ? "Sí" : "No"]);
   writeDataGrid(sheet, headers, rows, ["", "", "", 0, "", "", "No"]);
   const lastRow = Math.max(5 + data.accounts.length, 6);
-  sheet.columns = [{ width: 22 }, { width: 28 }, { width: 16 }, { width: 18 }, { width: 24 }, { width: 38 }, { width: 23 }];
+  sheet.columns = [{ width: 24 }, { width: 30 }, { width: 17 }, { width: 19 }, { width: 29 }, { width: 42 }, { width: 24 }];
   styleTableSheet(sheet, [4]);
   sheet.getColumn(7).alignment = { horizontal: "center" };
   sheet.getCell(`D${lastRow}`).numFmt = CURRENCY_FORMAT;
@@ -359,7 +368,7 @@ function addTransactionsSheet(workbook: import("exceljs").Workbook, data: Workbo
     transaction.note || null,
   ]);
   writeDataGrid(sheet, headers, rows, [null, null, null, "Gasto", 0, null, null, "General", null]);
-  sheet.columns = [{ width: 22 }, { width: 16 }, { width: 30 }, { width: 17 }, { width: 18 }, { width: 24 }, { width: 24 }, { width: 20 }, { width: 36 }];
+  sheet.columns = [{ width: 24 }, { width: 17 }, { width: 34 }, { width: 18 }, { width: 20 }, { width: 25 }, { width: 25 }, { width: 22 }, { width: 40 }];
   styleTableSheet(sheet, [5], [2]);
   sheet.getColumn(4).alignment = { horizontal: "center" };
 }
@@ -371,7 +380,7 @@ function addEventsSheet(workbook: import("exceljs").Workbook, data: WorkbookBack
   const headers = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
   const rows = data.events.map((event) => [event.id, parseIsoDate(event.date), event.title, kindLabel(event.kind), event.numericAmount, event.detail || null, recurrenceLabel(event.recurrence), event.recurrenceEnd ? parseIsoDate(event.recurrenceEnd) : null, destinationLabel(event.destination), event.includeInProjection ? "Sí" : "No", event.tone, event.completedDates.join(", ") || null, event.skippedDates.join(", ") || null]);
   writeDataGrid(sheet, headers, rows, [null, null, null, null, 0, null, "Una vez", null, "No incluir", "No", "blue", null, null]);
-  sheet.columns = [{ width: 9 }, { width: 16 }, { width: 28 }, { width: 16 }, { width: 17 }, { width: 36 }, { width: 15 }, { width: 16 }, { width: 20 }, { width: 16 }, { width: 12 }, { width: 26 }, { width: 26 }];
+  sheet.columns = [{ width: 10 }, { width: 17 }, { width: 32 }, { width: 17 }, { width: 19 }, { width: 40 }, { width: 17 }, { width: 17 }, { width: 22 }, { width: 17 }, { width: 13 }, { width: 28 }, { width: 28 }];
   styleTableSheet(sheet, [5], [2, 8]);
   [10, 11].forEach((column) => { sheet.getColumn(column).alignment = { horizontal: "center" }; });
 }

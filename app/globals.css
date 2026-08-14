@@ -2008,6 +2008,15 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 .app-toast p { font-size: 12.5px; line-height: 1.4; margin: 0; }
 .app-toast button { background: transparent; border: 0; color: #9ba8b9; font-size: 20px; height: 30px; padding: 0; }
 
+.confirmation-backdrop { align-items: center; display: flex; justify-content: center; padding: 20px; z-index: 110; }
+.confirmation-modal { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-lg); display: grid; gap: 18px; max-width: 520px; padding: 28px; width: 100%; }
+.confirmation-mark { align-items: center; background: var(--red-light); border: 1px solid color-mix(in srgb, var(--red) 36%, transparent); border-radius: 14px; color: var(--red); display: flex; font-size: 22px; font-weight: 850; height: 48px; justify-content: center; width: 48px; }
+.confirmation-mark.warning { background: var(--orange-light); border-color: color-mix(in srgb, var(--orange) 36%, transparent); color: var(--orange); }
+.confirmation-copy h2 { font-size: clamp(24px, 4vw, 32px); letter-spacing: -0.035em; line-height: 1.08; margin: 7px 0 10px; }
+.confirmation-copy p { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin: 0; }
+.confirmation-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.confirmation-actions .danger-button { min-height: 46px; }
+
 .mobile-topbar, .tab-bar { display: none; }
 
 @media (max-width: 1180px) {
@@ -2152,6 +2161,9 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
   .transaction-actions { padding: 15px 18px calc(18px + env(safe-area-inset-bottom)); }
   .transaction-actions button { flex: 1; }
   .editor-modal { border-radius: 18px 18px 0 0; }
+  .confirmation-backdrop { align-items: flex-end; padding: 0; }
+  .confirmation-modal { border-radius: 20px 20px 0 0; padding: 24px 20px calc(22px + env(safe-area-inset-bottom)); }
+  .confirmation-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
