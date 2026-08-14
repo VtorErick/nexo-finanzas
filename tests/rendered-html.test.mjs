@@ -102,7 +102,7 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /const GBM_RETURN = 9/);
   assert.match(source, /const TRADING_MX_COMMISSION = 0\.25/);
   assert.match(source, /const CAPITAL_GAINS_TAX = 10/);
-  assert.match(source, /Math\.pow\(1 \+ Math\.max\(-99\.99, annualRate\) \/ 100, 1 \/ 12\) - 1/);
+  assert.match(source, /Math\.pow\(1 \+ sanitizeReturnRate\(annualRate\) \/ 100, 1 \/ 12\) - 1/);
   assert.match(source, /Comisión Trading MX/);
   assert.match(source, /ISR estimado sobre ganancia/);
   assert.match(source, /className="chart-line real-stroke"/);
@@ -123,7 +123,11 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /importNexoWorkbook/);
   assert.doesNotMatch(source, /nexo-respaldo-\$\{todayIso\}\.json/);
   assert.match(source, /Restablecer datos de ejemplo/);
-  assert.match(source, /getNexoStorageKeys\(\).*localStorage\.removeItem/s);
+  assert.match(source, /const candidateKeys = \[/);
+  assert.match(source, /Try the next preserved Nexo snapshot/);
+  assert.doesNotMatch(source, /filter\(\(key\) => key !== STORAGE_KEY\)\s*\.forEach\(\(key\) => window\.localStorage\.removeItem/);
+  assert.match(source, /function trapFocusInModal\(/);
+  assert.match(source, /transactionTriggerRef\.current\?\.isConnected/);
   assert.match(source, /formatDurationMonths\(goalMonth\)/);
   assert.match(source, /const coverageMonths = monthlyExpenses > 0/);
   assert.match(source, /Cómo se forma la proyección/);
@@ -163,6 +167,25 @@ test("defines a privacy-safe static build for Vercel", async () => {
   assert.doesNotMatch(builder, /localStorage|\.xlsx|número de cuenta|saldo real/i);
 });
 
+test("clamps hostile and locale-formatted financial inputs", async () => {
+  const source = await readFile(new URL("../app/lib/nexo-values.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`;
+  const values = await import(moduleUrl);
+
+  assert.equal(values.parseMoneyInput("$1,234.50"), 1234.5);
+  assert.equal(values.parseMoneyInput("1,5"), 1.5);
+  assert.equal(values.parseMoneyInput("no es un monto"), 0);
+  assert.equal(values.sanitizeReturnRate("6,5"), 6.5);
+  assert.equal(values.sanitizeReturnRate("1e309"), 100);
+  assert.equal(values.sanitizeReturnRate("-1e309"), -99);
+  assert.equal(values.sanitizeInflationRate("1e309"), 100);
+  assert.equal(values.sanitizePercentRate("-10"), 0);
+  assert.equal(Number.isFinite(values.sanitizeMoney(Number.POSITIVE_INFINITY)), true);
+});
+
 test("builds a formatted and reimportable Excel workbook", async () => {
   const source = await readFile(new URL("../app/lib/nexo-workbook.ts", import.meta.url), "utf8");
 
@@ -189,10 +212,19 @@ test("builds a formatted and reimportable Excel workbook", async () => {
 test("exports an Excel-compatible workbook and reimports all data", async () => {
   const sourceUrl = new URL("../app/lib/nexo-workbook.ts", import.meta.url);
   const temporaryUrl = new URL(`./.nexo-workbook-${process.pid}.mjs`, import.meta.url);
+  const temporaryValuesName = `.nexo-values-${process.pid}.mjs`;
+  const temporaryValuesUrl = new URL(`./${temporaryValuesName}`, import.meta.url);
   const source = await readFile(sourceUrl, "utf8");
+  const valuesSource = await readFile(new URL("../app/lib/nexo-values.ts", import.meta.url), "utf8");
+  const valuesCompiled = ts.transpileModule(valuesSource, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
   const compiled = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText.replace("./xlsx-compat.js", "../app/lib/xlsx-compat.js");
+  }).outputText
+    .replace("./xlsx-compat.js", "../app/lib/xlsx-compat.js")
+    .replace("./nexo-values", `./${temporaryValuesName}`);
+  await writeFile(temporaryValuesUrl, valuesCompiled, "utf8");
   await writeFile(temporaryUrl, compiled, "utf8");
 
   try {
@@ -236,7 +268,18 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
     assert.equal(imported.transactions.length, 1);
     assert.equal(imported.transactions[0].title, "Nómina de prueba");
     assert.equal(imported.accounts[0].label, "Cuenta de prueba");
+
+    const { default: ExcelJS } = await import("exceljs");
+    const tamperedWorkbook = new ExcelJS.Workbook();
+    await tamperedWorkbook.xlsx.load(buffer);
+    tamperedWorkbook.getWorksheet("Cuentas").getCell("A7").value = "a1";
+    const tamperedBuffer = await tamperedWorkbook.xlsx.writeBuffer();
+    await assert.rejects(
+      () => importNexoWorkbook({ size: tamperedBuffer.byteLength, arrayBuffer: async () => tamperedBuffer }),
+      /IDs de cuenta duplicados/,
+    );
   } finally {
     await unlink(temporaryUrl).catch(() => {});
+    await unlink(temporaryValuesUrl).catch(() => {});
   }
 });

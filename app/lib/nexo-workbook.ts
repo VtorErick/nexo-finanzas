@@ -1,5 +1,13 @@
-import type { Worksheet } from "exceljs";
+import type { CellValue, Worksheet } from "exceljs";
 import { makeExcelCompatible } from "./xlsx-compat.js";
+import {
+  clampFiniteNumber,
+  sanitizeInflationRate,
+  sanitizeMoney,
+  sanitizePercentRate,
+  sanitizeReturnRate,
+  sanitizeSignedMoney,
+} from "./nexo-values";
 
 export type WorkbookAccount = {
   id: string;
@@ -184,8 +192,14 @@ function textValue(value: unknown) {
 
 function numberValue(value: unknown) {
   const normalized = excelValue(value);
-  if (typeof normalized === "number") return normalized;
-  return Number(String(normalized ?? "").replace(/[^\d.-]/g, "")) || 0;
+  if (typeof normalized === "number") return sanitizeSignedMoney(normalized);
+  return sanitizeSignedMoney(Number(String(normalized ?? "").replace(/[^\d.-]/g, "")) || 0);
+}
+
+function isIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = parseIsoDate(value);
+  return Number.isFinite(date.getTime()) && toIsoDate(date) === value;
 }
 
 function booleanValue(value: unknown) {
@@ -252,7 +266,7 @@ function styleTableSheet(sheet: Worksheet, currencyColumns: number[], dateColumn
   sheet.autoFilter = { from: "A5", to: sheet.getRow(sheet.rowCount).getCell(sheet.columnCount).address };
 }
 
-function writeDataGrid(sheet: Worksheet, headers: string[], rows: unknown[][], emptyRow: unknown[]) {
+function writeDataGrid(sheet: Worksheet, headers: string[], rows: CellValue[][], emptyRow: CellValue[]) {
   sheet.getRow(5).values = headers;
   (rows.length ? rows : [emptyRow]).forEach((row, index) => {
     sheet.getRow(6 + index).values = row;
@@ -528,6 +542,7 @@ function tableRows(sheet: Worksheet, expectedHeaders: string[]) {
 }
 
 export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
+  if (typeof file.size === "number" && file.size > 25 * 1024 * 1024) throw new Error("El respaldo supera el límite de 25 MB");
   const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(await file.arrayBuffer());
@@ -543,7 +558,11 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
 
   const accountHeaders = ["ID", "Cuenta", "Tipo", "Saldo (MXN)", "Rendimiento / estado", "Nota", "Fondo de emergencia"];
   const accountRows = tableRows(accountsSheet, accountHeaders);
-  const accounts = accountRows.map((row) => ({ id: textValue(row[0]), label: textValue(row[1]), group: groupValue(excelValue(row[2])), amount: Math.max(0, numberValue(row[3])), rate: textValue(row[4]), note: textValue(row[5]) }));
+  const accounts = accountRows.map((row) => ({ id: textValue(row[0]), label: textValue(row[1]), group: groupValue(excelValue(row[2])), amount: sanitizeMoney(numberValue(row[3])), rate: textValue(row[4]), note: textValue(row[5]) }));
+  if (accounts.length === 0) throw new Error("El respaldo no contiene cuentas");
+  if (accounts.some((account) => !account.id || !account.label)) throw new Error("Todas las cuentas necesitan ID y nombre");
+  const accountIds = new Set(accounts.map((account) => account.id));
+  if (accountIds.size !== accounts.length) throw new Error("El respaldo contiene IDs de cuenta duplicados");
   const emergencyIds = accountRows.filter((row) => booleanValue(row[6])).map((row) => textValue(row[0]));
 
   const transactionHeaders = ["ID", "Fecha", "Concepto", "Tipo", "Monto (MXN)", "Cuenta", "Cuenta destino", "Categoría", "Nota"];
@@ -552,20 +571,24 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
     date: dateValue(row[1]),
     title: textValue(row[2]),
     kind: transactionKindValue(excelValue(row[3])),
-    amount: Math.max(0, numberValue(row[4])),
+    amount: sanitizeMoney(numberValue(row[4])),
     accountId: textValue(row[5]),
     toAccountId: textValue(row[6]) || null,
     category: textValue(row[7]) || "General",
     note: textValue(row[8]),
   })) : [];
+  const transactionIds = new Set(transactions.map((transaction) => transaction.id));
+  if (transactionIds.size !== transactions.length || transactions.some((transaction) => !transaction.id)) throw new Error("El historial contiene IDs duplicados o vacíos");
+  if (transactions.some((transaction) => !isIsoDate(transaction.date) || transaction.amount <= 0 || !accountIds.has(transaction.accountId))) throw new Error("El historial contiene fechas, montos o cuentas inválidas");
+  if (transactions.some((transaction) => transaction.kind === "transfer" && (!transaction.toAccountId || transaction.toAccountId === transaction.accountId || !accountIds.has(transaction.toAccountId)))) throw new Error("El historial contiene una transferencia inválida");
 
   const eventHeaders = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
   const events = tableRows(eventsSheet, eventHeaders).map((row) => {
-    const numericAmount = Math.max(0, numberValue(row[4]));
+    const numericAmount = sanitizeMoney(numberValue(row[4]));
     const destination = destinationValue(excelValue(row[8]));
     const tone = textValue(row[10]);
     return {
-      id: numberValue(row[0]),
+      id: Math.trunc(clampFiniteNumber(numberValue(row[0]), 1, Number.MAX_SAFE_INTEGER, 1)),
       date: dateValue(row[1]),
       title: textValue(row[2]),
       kind: kindValue(excelValue(row[3])),
@@ -581,33 +604,40 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
       skippedDates: textValue(row[12]).split(",").map((value) => value.trim()).filter(Boolean),
     };
   });
+  const eventIds = new Set(events.map((event) => event.id));
+  if (eventIds.size !== events.length) throw new Error("La agenda contiene IDs duplicados");
+  if (events.some((event) => !isIsoDate(event.date) || (event.recurrenceEnd !== null && (!isIsoDate(event.recurrenceEnd) || event.recurrenceEnd < event.date)))) throw new Error("La agenda contiene fechas inválidas");
+  if (events.some((event) => event.completedDates.some((date) => !isIsoDate(date)) || event.skippedDates.some((date) => !isIsoDate(date)))) throw new Error("La agenda contiene estados con fechas inválidas");
 
   const extraHeaders = ["ID", "Activo", "Monto (MXN)", "Recurrente", "Frecuencia", "Destino", "Mes inicio", "Mes final", "Mes del año", "Mes único"];
   const extras = tableRows(extrasSheet, extraHeaders).map((row) => ({
-    id: numberValue(row[0]),
+    id: Math.trunc(clampFiniteNumber(numberValue(row[0]), 1, Number.MAX_SAFE_INTEGER, 1)),
     enabled: booleanValue(row[1]),
-    amount: Math.max(0, numberValue(row[2])),
+    amount: sanitizeMoney(numberValue(row[2])),
     recurring: booleanValue(row[3]),
     frequency: (textValue(row[4]) === "Anual" ? "annual" : "monthly") as WorkbookExtra["frequency"],
     destination: (destinationValue(excelValue(row[5])) === "cetes" ? "cetes" : "gbm") as WorkbookExtra["destination"],
-    startMonth: Math.max(1, numberValue(row[6]) || 1),
-    endMonth: textValue(row[7]) === "" ? null : Math.max(1, numberValue(row[7])),
-    monthOfYear: Math.max(1, Math.min(12, numberValue(row[8]) || 1)),
-    oneTimeMonth: Math.max(1, numberValue(row[9]) || 1),
+    startMonth: Math.trunc(clampFiniteNumber(numberValue(row[6]), 1, 360, 1)),
+    endMonth: textValue(row[7]) === "" ? null : Math.trunc(clampFiniteNumber(numberValue(row[7]), 1, 360, 1)),
+    monthOfYear: Math.trunc(clampFiniteNumber(numberValue(row[8]), 1, 12, 1)),
+    oneTimeMonth: Math.trunc(clampFiniteNumber(numberValue(row[9]), 1, 360, 1)),
   }));
+  const extraIds = new Set(extras.map((extra) => extra.id));
+  if (extraIds.size !== extras.length) throw new Error("Los escenarios contienen IDs duplicados");
+  if (extras.some((extra) => extra.endMonth !== null && extra.endMonth < extra.startMonth)) throw new Error("Un escenario termina antes de iniciar");
 
   return {
     dataMode: "imported",
     accounts,
     emergencyIds,
-    years: Math.max(1, Math.min(30, numberValue(config.get("Horizonte")) || 15)),
-    target: Math.max(1, numberValue(config.get("Meta"))),
-    monthlyExpenses: Math.max(0, numberValue(config.get("GastoMensual"))),
-    reserveRate: numberValue(config.get("TasaReserva")),
-    investmentRate: numberValue(config.get("TasaInversion")),
-    inflationRate: Math.max(0, numberValue(config.get("Inflacion"))),
-    brokerFee: config.has("ComisionTradingMX") ? Math.max(0, numberValue(config.get("ComisionTradingMX"))) : 0.25,
-    capitalGainsTax: config.has("ImpuestoGanancia") ? Math.max(0, numberValue(config.get("ImpuestoGanancia"))) : 10,
+    years: Math.trunc(clampFiniteNumber(numberValue(config.get("Horizonte")), 1, 30, 15)),
+    target: Math.max(1, sanitizeMoney(numberValue(config.get("Meta")))),
+    monthlyExpenses: sanitizeMoney(numberValue(config.get("GastoMensual"))),
+    reserveRate: sanitizeReturnRate(numberValue(config.get("TasaReserva"))),
+    investmentRate: sanitizeReturnRate(numberValue(config.get("TasaInversion"))),
+    inflationRate: sanitizeInflationRate(numberValue(config.get("Inflacion"))),
+    brokerFee: config.has("ComisionTradingMX") ? sanitizePercentRate(numberValue(config.get("ComisionTradingMX"))) : 0.25,
+    capitalGainsTax: config.has("ImpuestoGanancia") ? sanitizePercentRate(numberValue(config.get("ImpuestoGanancia"))) : 10,
     extras,
     events,
     transactions,

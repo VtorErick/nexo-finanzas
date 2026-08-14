@@ -11,6 +11,15 @@ import {
   type ReactNode,
 } from "react";
 import { captureNexoScreenshots, exportNexoWorkbook, importNexoWorkbook } from "./lib/nexo-workbook";
+import {
+  clampFiniteNumber,
+  parseMoneyInput,
+  sanitizeInflationRate,
+  sanitizeMoney,
+  sanitizePercentRate,
+  sanitizeReturnRate,
+  sanitizeSignedMoney,
+} from "./lib/nexo-values";
 
 const DEFAULT_TARGET = 150000;
 const DEFAULT_MONTHLY_EXPENSES = 25000;
@@ -44,6 +53,23 @@ type DataMode = "example" | "personal" | "imported";
 type Theme = "light" | "dark";
 type AppView = "overview" | "activity" | "accounts" | "plan" | "data";
 type TransactionKind = "expense" | "income" | "transfer";
+type StoredSnapshot = {
+  accounts?: Account[];
+  emergencyIds?: string[];
+  years?: number;
+  targetText?: string;
+  monthlyExpensesText?: string;
+  reserveRateText?: string;
+  gbmRateText?: string;
+  inflationRateText?: string;
+  brokerFeeText?: string;
+  capitalGainsTaxText?: string;
+  extras?: ExtraIncome[];
+  events?: CalendarEvent[];
+  transactions?: Transaction[];
+  dataMode?: DataMode;
+  savedAt?: number;
+};
 type ConfirmationAction =
   | { kind: "delete-transaction"; transaction: Transaction }
   | { kind: "reset-example" };
@@ -102,17 +128,14 @@ const DEFAULT_EMERGENCY_IDS = ["demo-emergency", "demo-cetes"];
 const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 const plainNumber = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
-const formatMoney = (value: number) => money.format(value);
-const formatNumberInput = (value: number) => plainNumber.format(Math.max(0, Math.round(value)));
-const parseMoneyInput = (value: string) => {
-  const normalized = value.replace(/[^\d.-]/g, "");
-  return normalized === "" ? 0 : Math.max(0, Number(normalized) || 0);
-};
+const formatMoney = (value: number) => money.format(sanitizeSignedMoney(value));
+const formatNumberInput = (value: number) => plainNumber.format(Math.round(sanitizeMoney(value)));
 const formatCompact = (value: number) => {
-  const absolute = Math.abs(value);
+  const safeValue = sanitizeSignedMoney(value);
+  const absolute = Math.abs(safeValue);
   const divisor = absolute >= 1000000 ? 1000000 : absolute >= 1000 ? 1000 : 1;
   const suffix = divisor === 1000000 ? " M" : divisor === 1000 ? " k" : "";
-  const scaled = value / divisor;
+  const scaled = safeValue / divisor;
   const digits = Math.abs(scaled) < 10 && !Number.isInteger(scaled) ? 1 : 0;
   return `$${scaled.toFixed(digits)}${suffix}`;
 };
@@ -171,6 +194,16 @@ function toIsoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function isValidIsoDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = parseIsoDate(value);
+  return Number.isFinite(date.getTime()) && toIsoDate(date) === value;
+}
+
+function safeText(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
 function dateAfter(date: Date, days: number) {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
@@ -216,24 +249,31 @@ function occurrenceFromEvent(event: CalendarEvent, date: Date): CalendarOccurren
   return { ...event, date: occurrenceDate, sourceId: event.id, occurrenceKey: `${event.id}-${occurrenceDate}` };
 }
 
-function normalizeEvent(event: Partial<CalendarEvent> & Pick<CalendarEvent, "id" | "date" | "title">): CalendarEvent {
-  const numericAmount = typeof event.numericAmount === "number" ? event.numericAmount : parseMoneyInput(event.amount ?? "");
-  const legacyDetail = numericAmount > 0 ? "" : event.amount ?? "";
+function normalizeEvent(event: Partial<CalendarEvent>, fallbackId = 1): CalendarEvent {
+  const date = isValidIsoDate(event.date) ? event.date : toIsoDate(getMexicoToday());
+  const numericAmount = sanitizeMoney(typeof event.numericAmount === "number" ? event.numericAmount : parseMoneyInput(safeText(event.amount)));
+  const rawAmount = safeText(event.amount);
+  const legacyDetail = numericAmount > 0 ? "" : rawAmount;
+  const recurrence: EventRecurrence = event.recurrence === "weekly" || event.recurrence === "monthly" || event.recurrence === "annual" ? event.recurrence : "none";
+  const recurrenceEnd = isValidIsoDate(event.recurrenceEnd) && event.recurrenceEnd >= date ? event.recurrenceEnd : null;
+  const tone: EventTone = event.tone === "green" || event.tone === "orange" || event.tone === "red" ? event.tone : "blue";
+  const kind: MovementKind = event.kind === "expense" || event.kind === "income" || event.kind === "contribution" ? event.kind : "transfer";
+  const destination: ProjectionDestination = event.destination === "cetes" || event.destination === "gbm" ? event.destination : "none";
   return {
-    id: event.id,
-    date: event.date,
-    title: event.title,
-    amount: event.amount ?? (numericAmount > 0 ? formatMoney(numericAmount) : "$0"),
-    detail: event.detail ?? legacyDetail,
+    id: Math.max(1, Math.trunc(clampFiniteNumber(event.id, 1, Number.MAX_SAFE_INTEGER, fallbackId))),
+    date,
+    title: safeText(event.title).trim() || "Movimiento sin nombre",
+    amount: rawAmount || (numericAmount > 0 ? formatMoney(numericAmount) : "$0"),
+    detail: safeText(event.detail, legacyDetail),
     numericAmount,
-    tone: event.tone ?? "blue",
-    kind: event.kind ?? "transfer",
-    destination: event.destination ?? "none",
-    includeInProjection: event.includeInProjection ?? false,
-    recurrence: event.recurrence ?? "none",
-    recurrenceEnd: event.recurrenceEnd ?? null,
-    completedDates: Array.isArray(event.completedDates) ? event.completedDates : [],
-    skippedDates: Array.isArray(event.skippedDates) ? event.skippedDates : [],
+    tone,
+    kind,
+    destination,
+    includeInProjection: event.includeInProjection === true && destination !== "none",
+    recurrence,
+    recurrenceEnd,
+    completedDates: Array.isArray(event.completedDates) ? event.completedDates.filter(isValidIsoDate) : [],
+    skippedDates: Array.isArray(event.skippedDates) ? event.skippedDates.filter(isValidIsoDate) : [],
   };
 }
 
@@ -327,22 +367,24 @@ function buildProjection(
   brokerFeeRate: number,
   capitalGainsTaxRate: number,
 ) {
-  const monthlyRate = (annualRate: number) => Math.pow(1 + Math.max(-99.99, annualRate) / 100, 1 / 12) - 1;
+  const safeStartingReserve = sanitizeMoney(startingReserve);
+  const safeStartingGbm = sanitizeMoney(startingGbm);
+  const monthlyRate = (annualRate: number) => Math.pow(1 + sanitizeReturnRate(annualRate) / 100, 1 / 12) - 1;
   const reserveMonthlyReturn = monthlyRate(reserveRate);
   const gbmMonthlyReturn = monthlyRate(gbmRate);
-  const feeRate = Math.max(0, brokerFeeRate) / 100;
-  const taxRate = Math.max(0, capitalGainsTaxRate) / 100;
-  let gbmBasis = startingGbm;
+  const feeRate = sanitizePercentRate(brokerFeeRate) / 100;
+  const taxRate = sanitizePercentRate(capitalGainsTaxRate) / 100;
+  let gbmBasis = safeStartingGbm;
   let brokerFees = 0;
   const netLiquidationValue = (reserveValue: number, gbmValue: number, basis: number) => {
-    const saleFee = gbmValue * feeRate;
+    const saleFee = sanitizeMoney(gbmValue * feeRate);
     const taxableGain = Math.max(0, gbmValue - saleFee - basis);
-    const capitalGainsTax = taxableGain * taxRate;
-    return Math.max(0, reserveValue + gbmValue - saleFee - capitalGainsTax);
+    const capitalGainsTax = sanitizeMoney(taxableGain * taxRate);
+    return sanitizeMoney(reserveValue + gbmValue - saleFee - capitalGainsTax);
   };
-  const points = [{ month: 0, reserve: startingReserve, gbm: startingGbm, netTotal: netLiquidationValue(startingReserve, startingGbm, gbmBasis) }];
-  let reserve = startingReserve;
-  let gbm = startingGbm;
+  const points = [{ month: 0, reserve: safeStartingReserve, gbm: safeStartingGbm, netTotal: netLiquidationValue(safeStartingReserve, safeStartingGbm, gbmBasis) }];
+  let reserve = safeStartingReserve;
+  let gbm = safeStartingGbm;
   let goalMonth: number | null = null;
   let netContributions = 0;
   const baseIso = toIsoDate(baseDate);
@@ -373,22 +415,22 @@ function buildProjection(
       .filter((event) => event.destination === "gbm")
       .reduce((total, event) => total + movementValue(event), 0);
 
-    const grossGbmMovement = extraToGbm + movementToGbm;
-    const buyFee = Math.max(0, grossGbmMovement) * feeRate;
-    reserve = Math.max(0, reserve * (1 + reserveMonthlyReturn) + extraToReserve + movementToReserve);
-    gbm = Math.max(0, gbm * (1 + gbmMonthlyReturn) + grossGbmMovement - buyFee);
-    gbmBasis = Math.max(0, gbmBasis + grossGbmMovement + Math.max(0, grossGbmMovement) * feeRate);
-    brokerFees += buyFee;
-    netContributions += extraToReserve + extraToGbm + movementToReserve + movementToGbm - buyFee;
+    const grossGbmMovement = sanitizeSignedMoney(extraToGbm + movementToGbm);
+    const buyFee = sanitizeMoney(Math.max(0, grossGbmMovement) * feeRate);
+    reserve = sanitizeMoney(reserve * (1 + reserveMonthlyReturn) + extraToReserve + movementToReserve);
+    gbm = sanitizeMoney(gbm * (1 + gbmMonthlyReturn) + grossGbmMovement - buyFee);
+    gbmBasis = sanitizeMoney(gbmBasis + grossGbmMovement + Math.max(0, grossGbmMovement) * feeRate);
+    brokerFees = sanitizeMoney(brokerFees + buyFee);
+    netContributions = sanitizeSignedMoney(netContributions + extraToReserve + extraToGbm + movementToReserve + movementToGbm - buyFee);
     if (!goalMonth && reserve >= target) goalMonth = month;
     points.push({ month, reserve, gbm, netTotal: netLiquidationValue(reserve, gbm, gbmBasis) });
   }
 
   const finalGbm = points.at(-1)!.gbm;
-  const exitSaleFee = finalGbm * feeRate;
+  const exitSaleFee = sanitizeMoney(finalGbm * feeRate);
   const exitTaxableGain = Math.max(0, finalGbm - exitSaleFee - gbmBasis);
-  const exitCapitalGainsTax = exitTaxableGain * taxRate;
-  const exitCosts = exitSaleFee + exitCapitalGainsTax;
+  const exitCapitalGainsTax = sanitizeMoney(exitTaxableGain * taxRate);
+  const exitCosts = sanitizeMoney(exitSaleFee + exitCapitalGainsTax);
   return { points, goalMonth, netContributions, brokerFees, exitSaleFee, exitCapitalGainsTax, exitCosts };
 }
 
@@ -397,7 +439,7 @@ function createExampleTransactions(today: Date): Transaction[] {
     const value = new Date(today.getFullYear(), today.getMonth() - monthsAgo, Math.min(day, 28), 12);
     return toIsoDate(value > today ? today : value);
   };
-  return [
+  const transactions: Transaction[] = [
     { id: "demo-tx-1", date: at(0, Math.max(1, today.getDate() - 2)), title: "Nómina", amount: 32000, kind: "income", accountId: "demo-daily", toAccountId: null, category: "Trabajo", note: "Ingreso mensual de ejemplo" },
     { id: "demo-tx-2", date: at(0, Math.max(1, today.getDate() - 1)), title: "Aportación al fondo", amount: 6000, kind: "transfer", accountId: "demo-daily", toAccountId: "demo-emergency", category: "Ahorro", note: "Prioridad del mes" },
     { id: "demo-tx-3", date: at(0, Math.max(1, today.getDate() - 1)), title: "Supermercado", amount: 1860, kind: "expense", accountId: "demo-daily", toAccountId: null, category: "Alimentos", note: "Compra semanal" },
@@ -413,22 +455,96 @@ function createExampleTransactions(today: Date): Transaction[] {
     { id: "demo-tx-13", date: at(4, 14), title: "Gastos del mes", amount: 14750, kind: "expense", accountId: "demo-daily", toAccountId: null, category: "General", note: "" },
     { id: "demo-tx-14", date: at(5, 28), title: "Nómina", amount: 30000, kind: "income", accountId: "demo-daily", toAccountId: null, category: "Trabajo", note: "" },
     { id: "demo-tx-15", date: at(5, 13), title: "Gastos del mes", amount: 16300, kind: "expense", accountId: "demo-daily", toAccountId: null, category: "General", note: "" },
-  ].sort((a, b) => b.date.localeCompare(a.date));
+  ];
+  return transactions.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function normalizeTransaction(transaction: Partial<Transaction> & Pick<Transaction, "id" | "date" | "title">): Transaction {
+function normalizeTransaction(transaction: Partial<Transaction>, fallbackId = "tx-recovered"): Transaction {
   const kind: TransactionKind = transaction.kind === "income" || transaction.kind === "transfer" ? transaction.kind : "expense";
   return {
-    id: transaction.id,
-    date: transaction.date,
-    title: transaction.title,
-    amount: Math.max(0, Number(transaction.amount) || 0),
+    id: safeText(transaction.id).trim() || fallbackId,
+    date: isValidIsoDate(transaction.date) ? transaction.date : toIsoDate(getMexicoToday()),
+    title: safeText(transaction.title).trim() || (kind === "income" ? "Ingreso" : kind === "transfer" ? "Transferencia" : "Gasto"),
+    amount: sanitizeMoney(transaction.amount),
     kind,
-    accountId: transaction.accountId ?? "",
-    toAccountId: kind === "transfer" ? transaction.toAccountId ?? null : null,
-    category: transaction.category ?? (kind === "income" ? "Ingreso" : kind === "transfer" ? "Transferencia" : "General"),
-    note: transaction.note ?? "",
+    accountId: safeText(transaction.accountId),
+    toAccountId: kind === "transfer" ? safeText(transaction.toAccountId) || null : null,
+    category: safeText(transaction.category).trim() || (kind === "income" ? "Ingreso" : kind === "transfer" ? "Transferencia" : "General"),
+    note: safeText(transaction.note),
   };
+}
+
+function normalizeStoredAccounts(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  const normalized: Account[] = [];
+  value.forEach((item, index) => {
+    if (!item || typeof item !== "object") return;
+    const account = item as Partial<Account>;
+    const id = safeText(account.id).trim() || `recovered-account-${index + 1}`;
+    if (ids.has(id)) return;
+    ids.add(id);
+    const group: AccountGroup = account.group === "reserve" || account.group === "investment" ? account.group : "cash";
+    normalized.push({
+      id,
+      label: safeText(account.label).trim() || `Cuenta ${normalized.length + 1}`,
+      amount: sanitizeMoney(account.amount),
+      rate: safeText(account.rate).trim() || "Sin rendimiento definido",
+      group,
+      note: safeText(account.note),
+    });
+  });
+  return normalized;
+}
+
+function normalizeStoredTransactions(value: unknown, accounts: Account[]) {
+  if (!Array.isArray(value)) return [];
+  const accountIds = new Set(accounts.map((account) => account.id));
+  const transactionIds = new Set<string>();
+  const normalized: Transaction[] = [];
+  value.forEach((item, index) => {
+    if (!item || typeof item !== "object") return;
+    const transaction = normalizeTransaction(item as Partial<Transaction>, `tx-recovered-${index + 1}`);
+    if (transactionIds.has(transaction.id) || !accountIds.has(transaction.accountId)) return;
+    if (transaction.kind === "transfer" && (!transaction.toAccountId || transaction.toAccountId === transaction.accountId || !accountIds.has(transaction.toAccountId))) return;
+    transactionIds.add(transaction.id);
+    normalized.push(transaction);
+  });
+  return normalized.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function normalizeStoredExtras(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index): ExtraIncome[] => {
+    if (!item || typeof item !== "object") return [];
+    const extra = item as Partial<ExtraIncome>;
+    const startMonth = Math.trunc(clampFiniteNumber(extra.startMonth, 1, MAX_YEARS * 12, 1));
+    const rawEndMonth = extra.endMonth === null || extra.endMonth === undefined ? null : Math.trunc(clampFiniteNumber(extra.endMonth, startMonth, MAX_YEARS * 12, startMonth));
+    return [{
+      id: Math.max(1, Math.trunc(clampFiniteNumber(extra.id, 1, Number.MAX_SAFE_INTEGER, index + 1))),
+      enabled: extra.enabled !== false,
+      amount: sanitizeMoney(extra.amount),
+      recurring: extra.recurring !== false,
+      frequency: extra.frequency === "annual" ? "annual" : "monthly",
+      destination: extra.destination === "cetes" ? "cetes" : "gbm",
+      startMonth,
+      endMonth: rawEndMonth,
+      monthOfYear: Math.trunc(clampFiniteNumber(extra.monthOfYear, 1, 12, 1)),
+      oneTimeMonth: Math.trunc(clampFiniteNumber(extra.oneTimeMonth, 1, MAX_YEARS * 12, 1)),
+    }];
+  });
+}
+
+function normalizeStoredEvents(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<number>();
+  return value.flatMap((item, index): CalendarEvent[] => {
+    if (!item || typeof item !== "object") return [];
+    const event = normalizeEvent(item as Partial<CalendarEvent>, index + 1);
+    if (ids.has(event.id)) return [];
+    ids.add(event.id);
+    return [event];
+  });
 }
 
 function BrandMark() {
@@ -630,6 +746,34 @@ function createEventDraft(today: Date): Omit<CalendarEvent, "id"> {
   };
 }
 
+function trapFocusInModal(event: KeyboardEvent, modal: HTMLElement | null) {
+  if (event.key !== "Tab" || !modal) return;
+  const focusable = Array.from(modal.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+  )).filter((element) => element.getAttribute("aria-hidden") !== "true");
+  if (focusable.length === 0) {
+    event.preventDefault();
+    modal.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable.at(-1)!;
+  if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function createClientId(prefix: string) {
+  const suffix = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${suffix}`;
+}
+
 export default function Home() {
   const [today] = useState(getMexicoToday);
   const todayIso = toIsoDate(today);
@@ -690,9 +834,15 @@ export default function Home() {
   const closeEditorButtonRef = useRef<HTMLButtonElement>(null);
   const closeTransactionButtonRef = useRef<HTMLButtonElement>(null);
   const closeConfirmationButtonRef = useRef<HTMLButtonElement>(null);
+  const editorModalRef = useRef<HTMLElement>(null);
+  const transactionModalRef = useRef<HTMLElement>(null);
+  const confirmationModalRef = useRef<HTMLElement>(null);
   const editorTriggerRef = useRef<HTMLElement | null>(null);
+  const transactionTriggerRef = useRef<HTMLElement | null>(null);
+  const confirmationTriggerRef = useRef<HTMLElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const themeResolvedRef = useRef(false);
+  const storageWarningShownRef = useRef(false);
 
   const total = sumAccounts(accounts);
   const reserve = selectedTotal(accounts, emergencyIds);
@@ -703,11 +853,11 @@ export default function Home() {
   const recommendedTargetMin = monthlyExpenses * 3;
   const recommendedTargetMax = monthlyExpenses * 6;
   const coverageMonths = monthlyExpenses > 0 ? reserve / monthlyExpenses : null;
-  const reserveRate = Number(reserveRateText) || 0;
-  const gbmRate = Number(gbmRateText) || 0;
-  const inflationRate = Math.max(0, Number(inflationRateText) || 0);
-  const brokerFee = Math.max(0, Number(brokerFeeText) || 0);
-  const capitalGainsTax = Math.max(0, Math.min(100, Number(capitalGainsTaxText) || 0));
+  const reserveRate = sanitizeReturnRate(reserveRateText);
+  const gbmRate = sanitizeReturnRate(gbmRateText);
+  const inflationRate = sanitizeInflationRate(inflationRateText);
+  const brokerFee = sanitizePercentRate(brokerFeeText);
+  const capitalGainsTax = sanitizePercentRate(capitalGainsTaxText);
   const reserveProgress = Math.min(Math.round((reserve / target) * 100), 100);
   const activeExtras = extras.filter((extra) => extra.enabled);
   const projectedEventSeries = events.filter((event) => event.includeInProjection).length;
@@ -767,7 +917,12 @@ export default function Home() {
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
-      const savedTheme = window.localStorage.getItem(THEME_KEY);
+      let savedTheme: string | null = null;
+      try {
+        savedTheme = window.localStorage.getItem(THEME_KEY);
+      } catch {
+        savedTheme = null;
+      }
       const preferredTheme: Theme = savedTheme === "dark" || savedTheme === "light"
         ? savedTheme
         : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -783,55 +938,60 @@ export default function Home() {
     if (!themeResolvedRef.current) return;
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem(THEME_KEY, theme);
+    try {
+      window.localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // The interface remains usable when private browsing blocks persistence.
+    }
   }, [theme]);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       try {
-        getNexoStorageKeys()
-          .filter((key) => key !== STORAGE_KEY)
-          .forEach((key) => window.localStorage.removeItem(key));
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const data = JSON.parse(saved) as {
-            accounts?: Account[];
-            emergencyIds?: string[];
-            years?: number;
-            targetText?: string;
-            monthlyExpensesText?: string;
-            reserveRateText?: string;
-            gbmRateText?: string;
-            inflationRateText?: string;
-            brokerFeeText?: string;
-            capitalGainsTaxText?: string;
-            extras?: ExtraIncome[];
-            events?: CalendarEvent[];
-            transactions?: Transaction[];
-            dataMode?: DataMode;
-            savedAt?: number;
-          };
-          if (Array.isArray(data.accounts)) setAccounts(data.accounts);
-          if (Array.isArray(data.emergencyIds)) setEmergencyIds(data.emergencyIds);
-          if (typeof data.years === "number") setYears(Math.max(1, Math.min(MAX_YEARS, data.years)));
+        const candidateKeys = [
+          STORAGE_KEY,
+          ...getNexoStorageKeys()
+            .filter((key) => key !== STORAGE_KEY)
+            .sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
+        ];
+        let data: StoredSnapshot | null = null;
+        for (const key of candidateKeys) {
+          const saved = window.localStorage.getItem(key);
+          if (!saved) continue;
+          try {
+            const candidate = JSON.parse(saved) as StoredSnapshot;
+            if (candidate && normalizeStoredAccounts(candidate.accounts).length > 0) {
+              data = candidate;
+              break;
+            }
+          } catch {
+            // Try the next preserved Nexo snapshot instead of deleting recovery data.
+          }
+        }
+        if (data) {
+          const loadedAccounts = normalizeStoredAccounts(data.accounts);
+          const loadedAccountIds = new Set(loadedAccounts.map((account) => account.id));
+          setAccounts(loadedAccounts);
+          setEmergencyIds(Array.isArray(data.emergencyIds) ? data.emergencyIds.filter((id) => loadedAccountIds.has(id)) : []);
+          if (typeof data.years === "number") setYears(Math.trunc(clampFiniteNumber(data.years, 1, MAX_YEARS, DEFAULT_YEARS)));
           if (typeof data.targetText === "string") setTargetText(formatNumberInput(parseMoneyInput(data.targetText)));
           if (typeof data.monthlyExpensesText === "string") setMonthlyExpensesText(formatNumberInput(parseMoneyInput(data.monthlyExpensesText)));
-          if (typeof data.reserveRateText === "string") setReserveRateText(data.reserveRateText);
-          if (typeof data.gbmRateText === "string") setGbmRateText(data.gbmRateText);
-          if (typeof data.inflationRateText === "string") setInflationRateText(data.inflationRateText);
-          if (typeof data.brokerFeeText === "string") setBrokerFeeText(data.brokerFeeText);
-          if (typeof data.capitalGainsTaxText === "string") setCapitalGainsTaxText(data.capitalGainsTaxText);
-          if (Array.isArray(data.extras)) setExtras(data.extras);
-          if (Array.isArray(data.events)) setEvents(data.events.map((event) => normalizeEvent(event)));
+          if (typeof data.reserveRateText === "string") setReserveRateText(String(sanitizeReturnRate(data.reserveRateText)));
+          if (typeof data.gbmRateText === "string") setGbmRateText(String(sanitizeReturnRate(data.gbmRateText)));
+          if (typeof data.inflationRateText === "string") setInflationRateText(String(sanitizeInflationRate(data.inflationRateText)));
+          if (typeof data.brokerFeeText === "string") setBrokerFeeText(String(sanitizePercentRate(data.brokerFeeText)));
+          if (typeof data.capitalGainsTaxText === "string") setCapitalGainsTaxText(String(sanitizePercentRate(data.capitalGainsTaxText)));
+          if (Array.isArray(data.extras)) setExtras(normalizeStoredExtras(data.extras));
+          if (Array.isArray(data.events)) setEvents(normalizeStoredEvents(data.events));
           const savedMode = data.dataMode === "imported" || data.dataMode === "personal" ? data.dataMode : "example";
           setTransactions(Array.isArray(data.transactions)
-            ? data.transactions.map((transaction) => normalizeTransaction(transaction))
+            ? normalizeStoredTransactions(data.transactions, loadedAccounts)
             : savedMode === "example" ? createExampleTransactions(today) : []);
           setDataMode(savedMode);
-          if (typeof data.savedAt === "number") setLastSavedAt(data.savedAt);
+          if (typeof data.savedAt === "number" && Number.isFinite(data.savedAt)) setLastSavedAt(data.savedAt);
         }
       } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
+        // Defaults remain available when browser storage cannot be read.
       } finally {
         setStorageReady(true);
       }
@@ -842,24 +1002,35 @@ export default function Home() {
   useEffect(() => {
     if (!storageReady) return;
     const savedAt = Date.now();
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      accounts,
-      emergencyIds,
-      years,
-      targetText,
-      monthlyExpensesText,
-      reserveRateText,
-      gbmRateText,
-      inflationRateText,
-      brokerFeeText,
-      capitalGainsTaxText,
-      extras,
-      events,
-      transactions,
-      dataMode,
-      savedAt,
-    }));
-    const statusTimer = window.setTimeout(() => setLastSavedAt(savedAt), 0);
+    let statusTimer: number | undefined;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        accounts,
+        emergencyIds,
+        years,
+        targetText,
+        monthlyExpensesText,
+        reserveRateText,
+        gbmRateText,
+        inflationRateText,
+        brokerFeeText,
+        capitalGainsTaxText,
+        extras,
+        events,
+        transactions,
+        dataMode,
+        savedAt,
+      }));
+      storageWarningShownRef.current = false;
+      statusTimer = window.setTimeout(() => setLastSavedAt(savedAt), 0);
+    } catch {
+      const shouldNotify = !storageWarningShownRef.current;
+      storageWarningShownRef.current = true;
+      statusTimer = window.setTimeout(() => {
+        setBackupStatus("El navegador bloqueó el guardado local. Descarga un Excel para no perder tus cambios.");
+        if (shouldNotify) showToast("No se pudo guardar en este navegador. Crea un respaldo de Excel.", "warning");
+      }, 0);
+    }
     return () => window.clearTimeout(statusTimer);
   }, [storageReady, accounts, emergencyIds, years, targetText, monthlyExpensesText, reserveRateText, gbmRateText, inflationRateText, brokerFeeText, capitalGainsTaxText, extras, events, transactions, dataMode]);
 
@@ -868,6 +1039,7 @@ export default function Home() {
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setEditing(false);
+      trapFocusInModal(event, editorModalRef.current);
     };
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
@@ -884,6 +1056,7 @@ export default function Home() {
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setTransactionEditorOpen(false);
+      trapFocusInModal(event, transactionModalRef.current);
     };
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
@@ -891,6 +1064,7 @@ export default function Home() {
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
+      if (transactionTriggerRef.current?.isConnected) transactionTriggerRef.current.focus();
     };
   }, [transactionEditorOpen]);
 
@@ -899,6 +1073,7 @@ export default function Home() {
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setConfirmationAction(null);
+      trapFocusInModal(event, confirmationModalRef.current);
     };
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
@@ -906,6 +1081,7 @@ export default function Home() {
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
+      if (confirmationTriggerRef.current?.isConnected) confirmationTriggerRef.current.focus();
     };
   }, [confirmationAction]);
 
@@ -936,7 +1112,7 @@ export default function Home() {
 
   function startPersonalSetup() {
     const starterAccounts: Account[] = [{
-      id: `personal-main-${Date.now()}`,
+      id: createClientId("personal-main"),
       label: "Cuenta principal",
       amount: 0,
       amountText: "0",
@@ -981,6 +1157,7 @@ export default function Home() {
   }
 
   function openNewTransaction(kind: TransactionKind = "expense", destinationId?: string) {
+    transactionTriggerRef.current = document.activeElement as HTMLElement | null;
     setEditingTransactionId(null);
     setTransactionDraft(newTransactionDraft(kind, destinationId));
     setTransactionError("");
@@ -988,6 +1165,7 @@ export default function Home() {
   }
 
   function openTransactionEditor(transaction: Transaction) {
+    transactionTriggerRef.current = document.activeElement as HTMLElement | null;
     setEditingTransactionId(transaction.id);
     setTransactionDraft({ ...transaction, amountText: formatNumberInput(transaction.amount) });
     setTransactionError("");
@@ -1027,7 +1205,7 @@ export default function Home() {
       return;
     }
     const saved: Transaction = {
-      id: editingTransactionId ?? `tx-${Date.now()}`,
+      id: editingTransactionId ?? createClientId("tx"),
       date: draft.date,
       title: draft.title.trim() || draft.category || (draft.kind === "income" ? "Ingreso" : draft.kind === "transfer" ? "Transferencia" : "Gasto"),
       amount: draft.amount,
@@ -1053,6 +1231,7 @@ export default function Home() {
       showToast("No se puede revertir este ingreso porque la cuenta ya no tiene saldo suficiente.", "warning");
       return;
     }
+    confirmationTriggerRef.current = document.activeElement as HTMLElement | null;
     setConfirmationAction({ kind: "delete-transaction", transaction });
   }
 
@@ -1086,7 +1265,7 @@ export default function Home() {
   }
 
   function addDraftAccount() {
-    const id = `custom-${Date.now()}`;
+    const id = createClientId("custom");
     setDraftAccounts((current) => [...current, { id, label: "Nueva cuenta", amount: 0, amountText: "0", rate: "Por definir", group: "cash", note: "Agrega una nota" }]);
     setSelectedDraftAccountId(id);
   }
@@ -1330,13 +1509,18 @@ export default function Home() {
   }
 
   function resetToExampleData() {
+    confirmationTriggerRef.current = document.activeElement as HTMLElement | null;
     setConfirmationAction({ kind: "reset-example" });
   }
 
   function applyExampleReset() {
     const freshAccounts = DEFAULT_ACCOUNTS.map((account) => ({ ...account }));
     const freshEmergencyIds = [...DEFAULT_EMERGENCY_IDS];
-    getNexoStorageKeys().forEach((key) => window.localStorage.removeItem(key));
+    try {
+      getNexoStorageKeys().forEach((key) => window.localStorage.removeItem(key));
+    } catch {
+      // Reset the in-memory app even when this browser blocks local storage.
+    }
     setAccounts(freshAccounts);
     setDraftAccounts(freshAccounts.map((account) => ({ ...account })));
     setEmergencyIds(freshEmergencyIds);
@@ -1741,7 +1925,7 @@ export default function Home() {
 
       {confirmationAction && (
         <div className="modal-backdrop confirmation-backdrop">
-          <section className="confirmation-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-description">
+          <section ref={confirmationModalRef} className="confirmation-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-description" tabIndex={-1}>
             <span className={`confirmation-mark ${confirmationAction.kind === "reset-example" ? "warning" : "danger"}`} aria-hidden="true">{confirmationAction.kind === "reset-example" ? "!" : "−"}</span>
             <div className="confirmation-copy">
               <span className="eyebrow">CONFIRMACIÓN</span>
@@ -1760,7 +1944,7 @@ export default function Home() {
 
       {transactionEditorOpen && (
         <div className="modal-backdrop transaction-backdrop">
-          <section className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="transaction-title" aria-describedby="transaction-description">
+          <section ref={transactionModalRef} className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="transaction-title" aria-describedby="transaction-description" tabIndex={-1}>
             <div className="editor-heading transaction-modal-heading">
               <div><span className="eyebrow">{editingTransactionId ? "EDITAR ACTIVIDAD" : "NUEVA ACTIVIDAD"}</span><h2 id="transaction-title">{editingTransactionId ? "Ajusta el movimiento" : "Registra un movimiento"}</h2><p id="transaction-description">El saldo y las visualizaciones se actualizarán al guardar.</p></div>
               <button className="close-button" ref={closeTransactionButtonRef} onClick={() => setTransactionEditorOpen(false)} aria-label="Cerrar movimiento">×</button>
@@ -1803,7 +1987,7 @@ export default function Home() {
 
       {editing && (
         <div className="modal-backdrop">
-          <section className="editor-modal" role="dialog" aria-modal="true" aria-labelledby="editor-title" aria-describedby="editor-description">
+          <section ref={editorModalRef} className="editor-modal" role="dialog" aria-modal="true" aria-labelledby="editor-title" aria-describedby="editor-description" tabIndex={-1}>
             <div className="editor-heading"><div><span className="eyebrow">DATOS BASE</span><h2 id="editor-title">Administrar cuentas y saldos</h2><p id="editor-description">Edita nombres, montos, rendimientos y notas. También puedes agregar o eliminar cuentas.</p></div><button className="close-button" ref={closeEditorButtonRef} onClick={() => setEditing(false)} aria-label="Cerrar editor">×</button></div>
             <div className="editor-toolbar"><span>{draftAccounts.length} cuentas</span><div>{removedDraftAccount && <button className="undo-account" onClick={undoDraftAccountRemoval}>Deshacer eliminación</button>}<button className="secondary-button" onClick={addDraftAccount}>+ Agregar cuenta</button></div></div>
             {accountEditorNotice && <p className="editor-notice" role="status">{accountEditorNotice}</p>}
