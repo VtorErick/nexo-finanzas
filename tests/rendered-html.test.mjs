@@ -31,6 +31,8 @@ test("server-renders the Nexo financial dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<html[^>]*lang="es"/i);
   assert.match(html, /<title>Nexo · Tu dinero, en perspectiva<\/title>/i);
+  assert.match(html, /<meta[^>]+name="description"[^>]+experiencia financiera clara/i);
+  assert.match(html, /<link[^>]+rel="icon"[^>]+href="\/favicon\.svg"/i);
   assert.match(html, /Tu dinero, en perspectiva\./);
   assert.match(html, /Patrimonio total/);
   assert.match(html, /Modo ejemplo/);

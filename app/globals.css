@@ -620,7 +620,7 @@ html:not([data-theme="dark"]) .undo-banner button:first-of-type { color: #7fe3ba
 .projection-data summary::after { border-bottom: 2px solid currentColor; border-right: 2px solid currentColor; content: ""; height: 7px; transform: rotate(45deg); transition: transform 160ms ease; width: 7px; }
 .projection-data[open] summary::after { transform: rotate(225deg); }
 .projection-data > div { overflow-x: auto; }
-.projection-data table { border-collapse: collapse; font-size: 13px; margin-top: 8px; min-width: 620px; width: 100%; }
+.projection-data table { border-collapse: collapse; font-size: 13px; margin-top: 8px; min-width: 480px; width: 100%; }
 .projection-data caption { color: var(--muted); padding-bottom: 8px; text-align: left; }
 .projection-data th, .projection-data td { border-top: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; padding: 10px 9px; text-align: right; }
 .projection-data th:first-child { text-align: left; }
@@ -2170,3 +2170,84 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
   .view-page { animation: none; }
   .side-nav button, .primary-button, .cashflow-bars span { transition: none; }
 }
+
+/* ============================================================
+   UX móvil · gráfica táctil, escenarios plegables y orden
+   ============================================================ */
+
+/* --- Gráfica: el dedo fija el punto sin abrir menú contextual ni seleccionar texto --- */
+.chart-frame svg { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.chart-hitbox { touch-action: pan-y; }
+
+.chart-readout { border-top: 1px solid var(--line-soft); margin-top: 6px; min-height: 112px; padding: 10px 10px 8px; }
+.chart-readout > p { align-items: center; color: var(--faint); display: flex; font-size: 11.5px; justify-content: center; line-height: 1.45; margin: 0; min-height: 92px; padding: 0 12px; text-align: center; }
+.chart-readout-head { align-items: center; display: flex; justify-content: space-between; }
+.chart-readout-head b { font-size: 12.5px; }
+.chart-readout-close { align-items: center; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 50%; color: var(--muted); display: inline-flex; flex: 0 0 auto; font-size: 15px; height: 28px; justify-content: center; line-height: 1; padding: 0; width: 28px; }
+.chart-readout-close:hover { background: var(--red-light); color: var(--red); }
+.chart-readout-grid { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 9px; }
+.chart-readout-grid > span { align-items: center; color: var(--muted); display: flex; flex-wrap: wrap; font-size: 10.5px; gap: 5px; line-height: 1.25; min-width: 0; }
+.chart-readout-grid b { color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 700; width: 100%; }
+.chart-readout-total { color: var(--muted); display: block; font-size: 10.5px; margin-top: 8px; }
+
+/* --- Escenarios de aportación: tarjeta plegable antes de la gráfica --- */
+.compact-simulation { margin: 0 0 16px; scroll-margin-top: 90px; }
+.extras-head { align-items: center; display: flex; gap: 10px; justify-content: space-between; padding: 8px; }
+.extras-toggle { align-items: center; background: transparent; border: 0; border-radius: 12px; color: inherit; cursor: pointer; display: flex; flex: 1 1 auto; gap: 12px; justify-content: space-between; min-height: 58px; min-width: 0; padding: 8px 10px 8px 16px; text-align: left; transition: background 150ms ease; }
+.extras-toggle:hover { background: var(--surface-soft); }
+.extras-toggle-copy { display: grid; gap: 3px; min-width: 0; }
+.extras-toggle-copy .eyebrow { margin: 0; }
+.extras-toggle-copy strong { font-size: 15px; letter-spacing: -0.2px; }
+.extras-toggle-copy small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extras-toggle-icon { align-items: center; background: var(--surface-elevated); border-radius: 50%; color: var(--ink-soft); display: inline-flex; flex: 0 0 auto; font-size: 19px; font-weight: 550; height: 30px; justify-content: center; line-height: 1; width: 30px; }
+.extras-add-button { align-self: center; flex: 0 0 auto; margin-right: 8px; }
+.extras-hint { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 0; padding: 4px 22px 6px; }
+.compact-simulation .extra-list { padding-top: 10px; }
+.compact-simulation .empty-state { min-height: 100px; }
+
+@media (max-width: 699px) {
+  /* Resumen: métricas en una fila compacta de tres columnas */
+  .overview-grid { gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .overview-grid .net-worth-card { grid-column: 1 / -1; }
+  .overview-grid .metric-card { align-items: flex-start; flex-direction: column; gap: 8px; justify-content: flex-start; min-height: 0; padding: 12px; }
+  .overview-grid .metric-card .metric-icon { border-radius: 9px; height: 30px; width: 30px; }
+  .overview-grid .metric-card strong { font-size: clamp(12px, 4vw, 16px); letter-spacing: -0.02em; margin: 2px 0 0; }
+  .overview-grid .metric-card span { font-size: 10.5px; }
+  .overview-grid .metric-card small { display: none; }
+
+  /* La acción prioritaria (fondo de emergencia) va antes que la gráfica de flujo */
+  .overview-insight-grid .reserve-focus { order: -1; }
+
+  /* Actividad: estadísticas del mes en una sola fila */
+  .activity-stat-grid { gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .activity-stat-grid article { gap: 3px; padding: 12px 10px; }
+  .activity-stat-grid article > span { font-size: 10px; line-height: 1.25; min-height: 25px; }
+  .activity-stat-grid strong { font-size: clamp(12px, 4vw, 16px); letter-spacing: -0.02em; }
+  .activity-stat-grid small { display: none; }
+
+  /* Sin scroll horizontal en resúmenes ni filtros */
+  .cashflow-summary { gap: 6px; overflow-x: visible; }
+  .cashflow-summary > div { min-width: 0; padding: 0 8px; }
+  .cashflow-summary strong { font-size: 15px; }
+  .cashflow-summary span, .cashflow-summary small { font-size: 10.5px; }
+  .ledger-toolbar { align-items: flex-start; flex-wrap: wrap; gap: 8px; overflow-x: visible; }
+  .filter-tabs { flex-wrap: wrap; }
+
+  /* Proyección: la gráfica va inmediatamente después del encabezado */
+  .projection-card { display: flex; flex-direction: column; }
+  .projection-summary-head { order: 1; }
+  .chart-shell { order: 2; }
+  .projection-metrics { margin-top: 12px; order: 3; }
+  .projection-scope { border-top: 1px solid var(--line-soft); order: 4; }
+  .chart-note { order: 5; }
+  .projection-data { margin-top: 6px; order: 6; }
+
+  /* Escenarios: cabecera en columna para no comprimir el botón */
+  .extras-head { align-items: stretch; flex-direction: column; gap: 4px; padding: 6px; }
+  .extras-add-button { margin: 0 4px 6px; }
+
+  /* Selector de cuentas del editor: lista vertical sin scroll horizontal */
+  .account-selector { display: grid; grid-template-columns: 1fr; max-height: 196px; overflow-x: visible; overflow-y: auto; }
+  .account-selector button { flex: 0 0 auto; }
+}
+

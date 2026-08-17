@@ -675,6 +675,11 @@ function ProjectionChart({
     setHoveredMonth(Math.round((relativeX / bounds.width) * (points.length - 1)));
   };
 
+  // En táctil el punto queda fijado al soltar el dedo; con mouse se limpia al salir.
+  const handleLeave = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (event.pointerType !== "touch") setHoveredMonth(null);
+  };
+
   return (
     <div className="chart-shell">
       <div className="chart-legend">
@@ -712,15 +717,35 @@ function ProjectionChart({
               <rect className="marker-real" x={x(hoveredPoint.month) - 4.5} y={y(hoveredPoint.realTotal) - 4.5} width="9" height="9" transform={`rotate(45 ${x(hoveredPoint.month)} ${y(hoveredPoint.realTotal)})`} />
             </g>
           )}
-          <rect className="chart-hitbox" x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} onPointerMove={handleMove} onPointerDown={handleMove} onPointerLeave={() => setHoveredMonth(null)} />
+          <rect className="chart-hitbox" x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} onPointerMove={handleMove} onPointerDown={handleMove} onPointerLeave={handleLeave} onContextMenu={(event) => event.preventDefault()} />
         </svg>
-        {hoveredPoint && (
+        {!compactChart && hoveredPoint && (
           <div className="chart-tooltip" style={{ left: `${(x(hoveredPoint.month) / width) * 100}%` }}>
             <b>{hoveredPoint.month === 0 ? "Hoy" : monthLabelForIndex(hoveredPoint.month, baseDate)}</b>
             <span><i className="tooltip-dot reserve" /> Reserva nominal {formatMoney(hoveredPoint.reserve)}</span>
             <span><i className="tooltip-dot investment" /> Inversión nominal {formatMoney(hoveredPoint.gbm)}</span>
             <span><i className="tooltip-dot real" /> Neto liquidable en pesos de hoy {formatMoney(hoveredPoint.realTotal)}</span>
             <small>Total antes de salida {formatMoney(hoveredPoint.reserve + hoveredPoint.gbm)}</small>
+          </div>
+        )}
+        {compactChart && (
+          <div className="chart-readout" aria-live="polite">
+            {hoveredPoint ? (
+              <>
+                <div className="chart-readout-head">
+                  <b>{hoveredPoint.month === 0 ? "Hoy" : monthLabelForIndex(hoveredPoint.month, baseDate)}</b>
+                  <button type="button" className="chart-readout-close" aria-label="Cerrar el detalle del punto" onClick={() => setHoveredMonth(null)}>×</button>
+                </div>
+                <div className="chart-readout-grid">
+                  <span><i className="tooltip-dot reserve" />Reserva<b>{formatMoney(hoveredPoint.reserve)}</b></span>
+                  <span><i className="tooltip-dot investment" />Inversión<b>{formatMoney(hoveredPoint.gbm)}</b></span>
+                  <span><i className="tooltip-dot real" />Pesos de hoy<b>{formatMoney(hoveredPoint.realTotal)}</b></span>
+                </div>
+                <small className="chart-readout-total">Total antes de salida {formatMoney(hoveredPoint.reserve + hoveredPoint.gbm)}</small>
+              </>
+            ) : (
+              <p>Toca o desliza sobre la gráfica para ver los valores de cada mes.</p>
+            )}
           </div>
         )}
       </div>
@@ -794,6 +819,7 @@ export default function Home() {
   const [extraDraft, setExtraDraft] = useState<ExtraIncome | null>(null);
   const [editingExtraId, setEditingExtraId] = useState<number | null>(null);
   const [creatingExtra, setCreatingExtra] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>(() => createExampleEvents(today));
   const [transactions, setTransactions] = useState<Transaction[]>(() => createExampleTransactions(today));
   const [transactionEditorOpen, setTransactionEditorOpen] = useState(false);
@@ -841,6 +867,7 @@ export default function Home() {
   const transactionTriggerRef = useRef<HTMLElement | null>(null);
   const confirmationTriggerRef = useRef<HTMLElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
+  const extrasCardRef = useRef<HTMLDivElement>(null);
   const themeResolvedRef = useRef(false);
   const storageWarningShownRef = useRef(false);
 
@@ -861,6 +888,12 @@ export default function Home() {
   const reserveProgress = Math.min(Math.round((reserve / target) * 100), 100);
   const activeExtras = extras.filter((extra) => extra.enabled);
   const projectedEventSeries = events.filter((event) => event.includeInProjection).length;
+  const plannedMonthlyTotal = activeExtras
+    .filter((extra) => extra.recurring && extra.frequency === "monthly")
+    .reduce((total, extra) => total + extra.amount, 0);
+  const extrasSummary = extras.length === 0
+    ? "Sin escenarios guardados"
+    : `${extras.length} ${extras.length === 1 ? "escenario" : "escenarios"} · ${activeExtras.length} ${activeExtras.length === 1 ? "activo" : "activos"}${plannedMonthlyTotal > 0 ? ` · ${formatMoney(plannedMonthlyTotal)} al mes` : ""}`;
   const projection = useMemo(
     () => buildProjection(years, reserve, gbm, reserveRate, gbmRate, extras, events, target, today, brokerFee, capitalGainsTax),
     [years, reserve, gbm, reserveRate, gbmRate, extras, events, target, today, brokerFee, capitalGainsTax],
@@ -1327,12 +1360,19 @@ export default function Home() {
     });
     setEditingExtraId(id);
     setCreatingExtra(true);
+    setExtrasOpen(true);
+  }
+
+  function startExtraCreation() {
+    addExtra();
+    window.requestAnimationFrame(() => extrasCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function editExtra(item: ExtraIncome) {
     setExtraDraft({ ...item, amountText: formatNumberInput(item.amount) });
     setEditingExtraId(item.id);
     setCreatingExtra(false);
+    setExtrasOpen(true);
   }
 
   function updateExtraDraft(patch: Partial<ExtraIncome>) {
@@ -1631,7 +1671,7 @@ export default function Home() {
           <button className="theme-toggle icon-only" type="button" aria-label={`Cambiar a tema ${theme === "light" ? "oscuro" : "claro"}`} aria-pressed={theme === "dark"} onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}>
             <span className="theme-icon" aria-hidden="true"><Icon name={theme === "light" ? "moon" : "sun"} size={18} /></span><b>{theme === "light" ? "Oscuro" : "Claro"}</b>
           </button>
-          <button className="primary-button edit-balances-button" onClick={() => openNewTransaction("expense")}><span className="label-full">+ Movimiento</span><span className="label-short">+</span></button>
+          <button className="primary-button edit-balances-button" aria-label="Registrar movimiento" onClick={() => openNewTransaction("expense")}><span className="label-full">+ Movimiento</span><span className="label-short" aria-hidden="true">+</span></button>
         </div>
       </header>
 
@@ -1779,7 +1819,7 @@ export default function Home() {
         <section className="plan-view-header view-page" hidden={activeView !== "plan"}>
           <div className="page-heading">
             <div><span className="eyebrow">PLAN</span><h1>Decide hoy. Mira más lejos.</h1><p>Separa la planeación de tu actividad real y prueba escenarios sin alterar tus saldos.</p></div>
-            <div className="heading-meta"><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="primary-button" onClick={planMode === "schedule" ? openNewEvent : addExtra}>{planMode === "schedule" ? "+ Planear movimiento" : "+ Simular aportación"}</button></div>
+            <div className="heading-meta"><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="primary-button" onClick={planMode === "schedule" ? openNewEvent : startExtraCreation}>{planMode === "schedule" ? "+ Planear movimiento" : "+ Simular aportación"}</button></div>
           </div>
           <div className="view-switcher" role="tablist" aria-label="Vista del plan"><button role="tab" aria-selected={planMode === "projection"} className={planMode === "projection" ? "active" : ""} onClick={() => setPlanMode("projection")}><Icon name="trend" size={18} /> Proyección</button><button role="tab" aria-selected={planMode === "schedule"} className={planMode === "schedule" ? "active" : ""} onClick={() => setPlanMode("schedule")}><Icon name="calendar" size={18} /> Agenda</button></div>
         </section>
@@ -1820,6 +1860,41 @@ export default function Home() {
           <div className="section-heading projection-heading">
             <div><span className="eyebrow">PROYECCIÓN</span><h2>Crecimiento y poder adquisitivo</h2><p>Compara en una sola vista los valores nominales y lo que realmente representarían en pesos de hoy.</p></div>
             <div className="projection-controls"><div className="horizon-presets" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button className={years === period ? "active" : ""} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" aria-label="Horizonte de proyección"><button aria-label="Reducir horizonte" onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite"><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button aria-label="Aumentar horizonte" onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div></div>
+          </div>
+
+          <div className="panel extras-card compact-simulation" ref={extrasCardRef}>
+            <div className="extras-head">
+              <button type="button" className="extras-toggle" aria-expanded={extrasOpen} aria-controls="extras-panel" onClick={() => setExtrasOpen((current) => !current)}>
+                <span className="extras-toggle-copy">
+                  <span className="eyebrow">SIMULACIÓN</span>
+                  <strong>Escenarios de aportación</strong>
+                  <small>{extrasSummary}</small>
+                </span>
+                <span className="extras-toggle-icon" aria-hidden="true">{extrasOpen ? "−" : "+"}</span>
+              </button>
+              {extrasOpen && <button className="primary-button extras-add-button" disabled={extraDraft !== null} onClick={addExtra}>{extraDraft ? "Edición en curso" : "+ Agregar escenario"}</button>}
+            </div>
+            {extrasOpen && (
+              <div id="extras-panel">
+                <p className="extras-hint">Prueba aportaciones hipotéticas sin convertirlas en movimientos reales de tu agenda. Los escenarios activos se reflejan en la gráfica de abajo.</p>
+                {extras.length === 0 && !extraDraft ? <div className="empty-state"><span>+</span><div><strong>Aún no hay ingresos adicionales</strong><p>Agrega un escenario para ver su impacto en la proyección.</p></div></div> : (
+                  <div className="extra-list">
+                    {extras.map((item, index) => editingExtraId === item.id && !creatingExtra && extraDraft ? renderExtraEditor(extraDraft, index) : (
+                      <article className={`extra-saved-card ${item.enabled ? "" : "is-off"}`} key={item.id}>
+                        <div className="extra-saved-main">
+                          <div><span className="saved-badge">GUARDADO</span><h3>Escenario {index + 1}</h3><p>{describeExtra(item)}</p></div>
+                          <strong className="extra-saved-amount">{formatMoney(item.amount)}</strong>
+                        </div>
+                        <div className="extra-saved-meta"><span>{item.recurring ? item.frequency === "monthly" ? "Recurrente · mensual" : "Recurrente · anual" : "Una sola vez"}</span><span>{item.destination === "gbm" ? "Inversión" : "CETES / reserva"}</span></div>
+                        <div className="extra-saved-actions"><label className="switch"><input aria-label={`Activar escenario ${index + 1}`} type="checkbox" checked={item.enabled} onChange={(event) => updateExtra(item.id, { enabled: event.target.checked })} /><span />{item.enabled ? "Activo" : "Inactivo"}</label><div><button className="secondary-button" onClick={() => editExtra(item)}>Editar</button><button className="danger-button" onClick={() => removeExtra(item.id)}>Eliminar</button></div></div>
+                      </article>
+                    ))}
+                    {creatingExtra && extraDraft && renderExtraEditor(extraDraft, extras.length)}
+                  </div>
+                )}
+                {extras.length > 0 && <div className="extras-footer">{activeExtras.length} escenario{activeExtras.length === 1 ? " activo" : "s activos"} incluido{activeExtras.length === 1 ? "" : "s"} en la gráfica</div>}
+              </div>
+            )}
           </div>
 
           <div className="projection-grid">
@@ -1871,25 +1946,6 @@ export default function Home() {
             </aside>
           </div>
 
-          <div className="panel extras-card compact-simulation">
-            <div className="panel-heading"><div><span className="eyebrow">SIMULACIÓN</span><h2>Escenarios de aportación</h2><p>Prueba aportaciones hipotéticas sin convertirlas en movimientos reales de tu agenda.</p></div><button className="primary-button" disabled={extraDraft !== null} onClick={addExtra}>{extraDraft ? "Edición en curso" : "+ Agregar escenario"}</button></div>
-            {extras.length === 0 && !extraDraft ? <div className="empty-state"><span>+</span><div><strong>Aún no hay ingresos adicionales</strong><p>Agrega un escenario para ver su impacto en la proyección.</p></div></div> : (
-              <div className="extra-list">
-                {extras.map((item, index) => editingExtraId === item.id && !creatingExtra && extraDraft ? renderExtraEditor(extraDraft, index) : (
-                  <article className={`extra-saved-card ${item.enabled ? "" : "is-off"}`} key={item.id}>
-                    <div className="extra-saved-main">
-                      <div><span className="saved-badge">GUARDADO</span><h3>Escenario {index + 1}</h3><p>{describeExtra(item)}</p></div>
-                      <strong className="extra-saved-amount">{formatMoney(item.amount)}</strong>
-                    </div>
-                    <div className="extra-saved-meta"><span>{item.recurring ? item.frequency === "monthly" ? "Recurrente · mensual" : "Recurrente · anual" : "Una sola vez"}</span><span>{item.destination === "gbm" ? "Inversión" : "CETES / reserva"}</span></div>
-                    <div className="extra-saved-actions"><label className="switch"><input aria-label={`Activar escenario ${index + 1}`} type="checkbox" checked={item.enabled} onChange={(event) => updateExtra(item.id, { enabled: event.target.checked })} /><span />{item.enabled ? "Activo" : "Inactivo"}</label><div><button className="secondary-button" onClick={() => editExtra(item)}>Editar</button><button className="danger-button" onClick={() => removeExtra(item.id)}>Eliminar</button></div></div>
-                  </article>
-                ))}
-                {creatingExtra && extraDraft && renderExtraEditor(extraDraft, extras.length)}
-              </div>
-            )}
-            {extras.length > 0 && <div className="extras-footer">{activeExtras.length} escenario{activeExtras.length === 1 ? " activo" : "s activos"} incluido{activeExtras.length === 1 ? "" : "s"} en la gráfica</div>}
-          </div>
         </section>
 
         <section id="respaldo" className="backup-panel view-page" hidden={activeView !== "data"}>
