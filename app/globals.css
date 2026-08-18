@@ -2347,3 +2347,59 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
   .reference-option-card { padding: 13px; }
 }
 
+/* ============================================================
+   Plan · jerarquía de escritorio, instrucciones y contraste
+   ============================================================ */
+
+.assumptions-result { background: var(--brand-surface); color: #ffffff; }
+.assumptions-result span, .assumptions-result small { color: rgba(255, 255, 255, 0.76); }
+.assumptions-result strong { color: #ffffff; }
+
+.plan-guide { align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 13px; display: flex; gap: 20px; margin-top: 12px; padding: 9px 14px; }
+.plan-guide-intro { display: grid; flex: 0 0 170px; gap: 2px; }
+.plan-guide-intro .eyebrow { margin: 0; }
+.plan-guide-intro strong { font-size: 12px; }
+.plan-guide-steps { align-items: stretch; display: grid; flex: 1 1 auto; gap: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; }
+.plan-guide-step { align-items: center; border-left: 1px solid var(--line-soft); display: flex; gap: 8px; min-width: 0; padding: 3px 14px; }
+.plan-guide-step:first-child { border-left: 0; }
+.plan-guide-step > b { align-items: center; background: var(--surface-accent); border-radius: 50%; color: var(--accent-strong); display: inline-flex; flex: 0 0 auto; font-size: 11px; height: 24px; justify-content: center; width: 24px; }
+.plan-guide-step > span { display: grid; gap: 1px; min-width: 0; }
+.plan-guide-step strong, .plan-guide-step small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-guide-step strong { font-size: 11.5px; }
+.plan-guide-step small { color: var(--muted); font-size: 10.5px; }
+
+@media (min-width: 700px) {
+  .plan-view-header { margin-bottom: 14px; }
+  .plan-view-header .page-heading { margin-bottom: 12px; }
+  .plan-view-header .page-heading h1 { font-size: clamp(32px, 2.8vw, 40px); letter-spacing: -0.045em; line-height: 1; margin: 4px 0 8px; }
+  .plan-view-header .page-heading p { font-size: 13px; }
+  .plan-view-header .view-switcher button { min-height: 36px; padding: 5px 14px; }
+  .projection-section { margin-top: 18px; }
+  .projection-heading { align-items: center; margin-bottom: 12px; }
+  .projection-heading h2 { font-size: 23px; }
+  .projection-heading p { font-size: 12.5px; margin-top: 4px; }
+  .projection-summary-head { padding: 18px 20px 12px; }
+  .compact-simulation, .reference-options-panel { margin-bottom: 10px; }
+  .compact-simulation .extras-head { padding: 5px; }
+  .compact-simulation .extras-toggle, .reference-options-summary { min-height: 62px; }
+  .reference-options-summary { padding-bottom: 9px; padding-top: 9px; }
+  .reference-summary-copy strong { font-size: 14px; }
+  .reference-summary-copy small { font-size: 11px; }
+}
+
+@media (min-width: 1180px) and (max-width: 1280px) {
+  .projection-grid { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+
+@media (max-width: 699px) {
+  .plan-view-header .page-heading h1 { font-size: clamp(30px, 8vw, 36px); letter-spacing: -0.045em; line-height: 1.02; }
+  .plan-view-header .page-heading p { font-size: 13px; }
+  .plan-guide { align-items: stretch; display: grid; gap: 8px; margin-top: 10px; padding: 11px 10px; }
+  .plan-guide-intro { flex: none; }
+  .plan-guide-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .plan-guide-step { align-items: start; display: grid; gap: 4px; padding: 3px 6px; }
+  .plan-guide-step > b { height: 22px; width: 22px; }
+  .plan-guide-step strong { font-size: 10px; white-space: normal; }
+  .plan-guide-step small { font-size: 9.5px; white-space: normal; }
+}
+

@@ -69,6 +69,7 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /Privacidad local/);
   assert.match(html, /Opciones, tasas y protección/);
   assert.match(html, /UDI de referencia/);
+  assert.match(html, /RUTA RÁPIDA/);
 });
 
 test("includes the extended planning controls", async () => {
@@ -134,6 +135,8 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /transactionTriggerRef\.current\?\.isConnected/);
   assert.match(source, /formatDurationMonths\(goalMonth\)/);
   assert.match(source, /const coverageMonths = monthlyExpenses > 0/);
+  assert.match(source, /Ruta rápida para usar Plan/);
+  assert.match(source, /Define el horizonte/);
   assert.match(source, /Cómo se forma la proyección/);
   assert.match(source, /disponibles no se proyectan/);
   assert.doesNotMatch(source, /SIGUIENTE ACCIÓN/);
@@ -158,6 +161,7 @@ test("defines accessible light and dark themes with distinguishable chart series
   assert.match(css, /\.transaction-modal/);
   assert.match(css, /\.confirmation-modal/);
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
+  assert.match(css, /\.assumptions-result \{ background: var\(--brand-surface\); color: #ffffff;/);
 });
 
 test("defines a privacy-safe static build for Vercel", async () => {

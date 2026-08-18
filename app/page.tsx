@@ -1930,10 +1930,19 @@ export default function Home() {
 
         <section className="plan-view-header view-page" hidden={activeView !== "plan"}>
           <div className="page-heading">
-            <div><span className="eyebrow">PLAN</span><h1>Decide hoy. Mira más lejos.</h1><p>Separa la planeación de tu actividad real y prueba escenarios sin alterar tus saldos.</p></div>
-            <div className="heading-meta"><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="primary-button" onClick={planMode === "schedule" ? openNewEvent : startExtraCreation}>{planMode === "schedule" ? "+ Planear movimiento" : "+ Simular aportación"}</button></div>
+            <div><span className="eyebrow">PLAN</span><h1>Decide hoy. Mira más lejos.</h1><p>Configura el horizonte, prueba aportaciones opcionales y revisa el resultado.</p></div>
+            <div className="heading-meta"><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="primary-button" onClick={planMode === "schedule" ? openNewEvent : startExtraCreation}>{planMode === "schedule" ? "+ Planear movimiento" : "+ Agregar escenario"}</button></div>
           </div>
           <div className="view-switcher" role="tablist" aria-label="Vista del plan"><button role="tab" aria-selected={planMode === "projection"} className={planMode === "projection" ? "active" : ""} onClick={() => setPlanMode("projection")}><Icon name="trend" size={18} /> Proyección</button><button role="tab" aria-selected={planMode === "schedule"} className={planMode === "schedule" ? "active" : ""} onClick={() => setPlanMode("schedule")}><Icon name="calendar" size={18} /> Agenda</button></div>
+          <div className="plan-guide" aria-label="Ruta rápida para usar Plan">
+            <div className="plan-guide-intro"><span className="eyebrow">RUTA RÁPIDA</span><strong>{planMode === "projection" ? "De la idea al resultado" : "De la fecha al seguimiento"}</strong></div>
+            <ol className="plan-guide-steps">
+              {(planMode === "projection"
+                ? [["Define el horizonte", "1 a 30 años"], ["Agrega escenarios", "Opcional"], ["Revisa el resultado", "Gráfica y supuestos"]]
+                : [["Planea movimientos", "Fechas e importes"], ["Marca lo hecho", "Seguimiento"], ["Proyecta lo necesario", "Solo lo incluido"]]
+              ).map(([title, detail], index) => <li className="plan-guide-step" key={title}><b>{index + 1}</b><span><strong>{title}</strong><small>{detail}</small></span></li>)}
+            </ol>
+          </div>
         </section>
 
         <section id="agenda" className="section-wrap movements-section view-page" hidden={activeView !== "plan" || planMode !== "schedule"}>
@@ -2009,8 +2018,6 @@ export default function Home() {
             )}
           </div>
 
-          <SavingsOptionsReference />
-
           <div className="projection-grid">
             <div className="panel projection-card comparison-view">
               <div className="projection-summary-head"><div><span>Resultado al final del horizonte</span><strong>{years} {years === 1 ? "año" : "años"}</strong></div><span className="projection-badge success">3 líneas comparables</span></div>
@@ -2059,6 +2066,8 @@ export default function Home() {
               <div className="assumptions-result"><span>Poder adquisitivo al final</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>El total neto al salir es {formatMoney(lastNominalTotal)}. La diferencia de {formatMoney(inflationImpact)} representa el efecto acumulado de una inflación de {inflationRate}% anual.</small></div>
             </aside>
           </div>
+
+          <SavingsOptionsReference />
 
         </section>
 
