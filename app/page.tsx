@@ -12,6 +12,13 @@ import {
 } from "react";
 import { captureNexoScreenshots, exportNexoWorkbook, importNexoWorkbook } from "./lib/nexo-workbook";
 import {
+  calculateReferenceValidation,
+  REFERENCE_SHEET,
+  SAVINGS_OPTIONS,
+  type ProtectionScheme,
+  type SavingsOption,
+} from "./lib/savings-options";
+import {
   clampFiniteNumber,
   parseMoneyInput,
   sanitizeInflationRate,
@@ -127,8 +134,10 @@ const DEFAULT_EMERGENCY_IDS = ["demo-emergency", "demo-cetes"];
 
 const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+const preciseMoney = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 const plainNumber = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
 const formatMoney = (value: number) => money.format(sanitizeSignedMoney(value));
+const formatPreciseMoney = (value: number) => preciseMoney.format(sanitizeSignedMoney(value));
 const formatNumberInput = (value: number) => plainNumber.format(Math.round(sanitizeMoney(value)));
 const formatCompact = (value: number) => {
   const safeValue = sanitizeSignedMoney(value);
@@ -576,6 +585,109 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
 
 function InfoTip({ text }: { text: string }) {
   return <button type="button" className="info-tip" aria-label={`Información: ${text}`}><span aria-hidden="true">i</span><span className="info-tip-content" role="tooltip">{text}</span></button>;
+}
+
+function protectionLabel(scheme: ProtectionScheme) {
+  if (scheme === "ipab") return "IPAB";
+  if (scheme === "prosofipo") return "PROSOFIPO";
+  if (scheme === "none") return "No IPAB/Fondo";
+  return "Por confirmar";
+}
+
+function validationLabel(status: SavingsOption["validationStatus"]) {
+  if (status === "verified") return "Confirmado";
+  if (status === "partial") return "Parcial";
+  return "Revisar";
+}
+
+function parseReferenceNumber(value: string, fallback: number, minimum: number, maximum: number) {
+  const numeric = Number(value.replace(",", "."));
+  return Number.isFinite(numeric) ? Math.min(Math.max(numeric, minimum), maximum) : fallback;
+}
+
+function SavingsOptionsReference() {
+  const [udiText, setUdiText] = useState(String(REFERENCE_SHEET.udiValue));
+  const [daysText, setDaysText] = useState(String(REFERENCE_SHEET.days));
+  const udiValue = parseReferenceNumber(udiText, REFERENCE_SHEET.udiValue, 0.000001, 100);
+  const days = Math.round(parseReferenceNumber(daysText, REFERENCE_SHEET.days, 1, 365));
+  const validation = calculateReferenceValidation(udiValue, days);
+  const initialOptions = SAVINGS_OPTIONS.filter((option) => option.group === "initial");
+  const otherOptions = SAVINGS_OPTIONS.filter((option) => option.group === "other");
+
+  const renderOption = (option: SavingsOption) => {
+    const displayedRate = option.currentRate ?? option.annualRate;
+    const protectionAmount = option.validatedProtection === "ipab"
+      ? validation.ipabProtection
+      : option.validatedProtection === "prosofipo" ? validation.prosofipoProtection : null;
+    const hasRateCorrection = option.currentRate !== undefined && option.annualRate !== option.currentRate;
+    const hasProtectionCorrection = option.sheetProtection !== option.validatedProtection;
+
+    return (
+      <article className={`reference-option-card status-${option.validationStatus}`} key={option.id}>
+        <div className="reference-option-head">
+          <h4>{option.name}</h4>
+          <span className={`reference-status ${option.validationStatus}`}>{validationLabel(option.validationStatus)}</span>
+        </div>
+        <div className="reference-option-metrics">
+          <div><span>Tasa anual</span><strong>{displayedRate === null ? "—" : `${displayedRate.toFixed(2)}%`}</strong>{hasRateCorrection && <small>Hoja: {option.annualRate!.toFixed(2)}%</small>}</div>
+          <div><span>Tope de la hoja</span><strong>{option.capText}</strong></div>
+          <div><span>Protección validada</span><strong>{protectionLabel(option.validatedProtection)}</strong>{protectionAmount !== null && <small>{formatPreciseMoney(protectionAmount)}</small>}</div>
+        </div>
+        {option.invested !== null && <div className="reference-option-report"><span>Captura · {REFERENCE_SHEET.days} días</span><strong>{option.reportedInterest === null ? "—" : formatPreciseMoney(option.reportedInterest)}</strong><small>ISR de hoja: {option.reportedTax === null ? "—" : formatPreciseMoney(option.reportedTax)}</small></div>}
+        <p className="reference-option-requirement"><strong>Requisito</strong>{option.requirement}</p>
+        <p className="reference-option-note">{option.validationNote}{hasProtectionCorrection && ` La hoja marca ${protectionLabel(option.sheetProtection)}.`}</p>
+        <a className="reference-option-source" href={option.sourceUrl} target="_blank" rel="noreferrer">Fuente: {option.sourceLabel}<span aria-hidden="true">↗</span></a>
+      </article>
+    );
+  };
+
+  return (
+    <section className="panel reference-options-panel">
+      <details>
+        <summary className="reference-options-summary">
+          <span className="reference-summary-copy"><span className="eyebrow">CATÁLOGO DE AHORRO</span><strong>Opciones, tasas y protección</strong><small>{SAVINGS_OPTIONS.length} opciones · datos de la hoja con revisión de fuentes</small></span>
+          <span className="reference-summary-mark" aria-hidden="true">+</span>
+        </summary>
+        <div className="reference-options-body">
+          <div className="reference-review-note">
+            <span className="reference-review-icon" aria-hidden="true">i</span>
+            <p><strong>Qué está validado</strong> Los límites de IPAB y Fondo de Protección, las conversiones de UDI y los totales de la hoja se revisan aquí. Las tasas, promociones y requisitos cambian; una marca “Parcial” o “Revisar” no debe usarse como confirmación contractual.</p>
+          </div>
+
+          <div className="reference-controls">
+            <label><span>Plazo de cálculo</span><div className="reference-input"><input type="text" inputMode="numeric" value={daysText} onChange={(event) => setDaysText(event.target.value)} onBlur={() => setDaysText(String(days))} /><b>días</b></div></label>
+            <label><span>UDI de referencia <small>editable</small></span><div className="reference-input"><input type="text" inputMode="decimal" value={udiText} onChange={(event) => setUdiText(event.target.value)} onBlur={() => setUdiText(udiValue.toFixed(6))} /><b>MXN</b></div></label>
+          </div>
+
+          <div className="reference-validation-grid" aria-label="Validación de la hoja">
+            <article><span>Inversión total</span><strong>{formatMoney(validation.investedTotal)}</strong><small>Suma de las filas iniciales</small></article>
+            <article><span>Tasa ponderada</span><strong>{validation.weightedRate.toFixed(2)}%</strong><small>Coincide con la hoja: {REFERENCE_SHEET.reportedWeightedRate.toFixed(2)}%</small></article>
+            <article><span>Rendimiento reportado</span><strong>{formatPreciseMoney(REFERENCE_SHEET.reportedInterestTotal)}</strong><small>Filas suman {formatPreciseMoney(validation.rowInterestTotal)} · diferencia {formatPreciseMoney(validation.rowTotalDifference)}</small></article>
+            <article><span>ISR reportado</span><strong>{formatPreciseMoney(REFERENCE_SHEET.reportedTaxTotal)}</strong><small>Filas suman {formatPreciseMoney(validation.rowTaxTotal)}</small></article>
+            <article className={Math.abs(validation.simpleInterestDifference) > 0.01 ? "is-warning" : ""}><span>Fórmula simple 365</span><strong>{formatPreciseMoney(validation.simpleInterestTotal)}</strong><small>{days} días · diferencia contra la hoja {formatPreciseMoney(validation.simpleInterestDifference)}</small></article>
+          </div>
+
+          <div className="reference-protection-grid">
+            <article><span>25,000 UDI · PROSOFIPO</span><strong>{formatPreciseMoney(validation.prosofipoProtection)}</strong><small>Fondo de Protección, si la entidad está autorizada y participa.</small></article>
+            <article><span>400,000 UDI · IPAB</span><strong>{formatPreciseMoney(validation.ipabProtection)}</strong><small>Por persona y por institución, sujeto a operaciones garantizadas.</small></article>
+          </div>
+
+          <div className="reference-source-strip"><span>Fuentes marco:</span><a href="https://www.gob.mx/ipab" target="_blank" rel="noreferrer">IPAB</a><a href="https://www.fondodeproteccion.mx/" target="_blank" rel="noreferrer">Fondo de Protección</a><a href="https://www.banxico.org.mx/SieInternet/consultarDirectorioInternetAction.do?accion=consultarCuadro&idCuadro=CP150&sector=8&locale=es" target="_blank" rel="noreferrer">Banxico · UDI</a><span>Revisado 18 ago 2026</span></div>
+
+          <div className="reference-option-group">
+            <div className="reference-group-heading"><div><span className="eyebrow">CAPTURA PRINCIPAL</span><h3>Opciones iniciales</h3></div><span>{initialOptions.length} opciones</span></div>
+            <div className="reference-option-grid">{initialOptions.map(renderOption)}</div>
+          </div>
+          <div className="reference-option-group">
+            <div className="reference-group-heading"><div><span className="eyebrow">ALTERNATIVAS</span><h3>Otras opciones</h3></div><span>{otherOptions.length} opciones</span></div>
+            <div className="reference-option-grid">{otherOptions.map(renderOption)}</div>
+          </div>
+
+          <p className="reference-maintenance-note">Para actualizar el catálogo de forma permanente, edita únicamente <code>app/lib/savings-options.ts</code>. El UDI también se puede ajustar aquí para recalcular los límites en pesos sin tocar el código.</p>
+        </div>
+      </details>
+    </section>
+  );
 }
 
 function GoalRing({ progress }: { progress: number }) {
@@ -1896,6 +2008,8 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          <SavingsOptionsReference />
 
           <div className="projection-grid">
             <div className="panel projection-card comparison-view">

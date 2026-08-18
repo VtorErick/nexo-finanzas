@@ -67,6 +67,8 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /Ajustar meta de reserva/);
   assert.match(html, /Guardar o restaurar tus datos/);
   assert.match(html, /Privacidad local/);
+  assert.match(html, /Opciones, tasas y protección/);
+  assert.match(html, /UDI de referencia/);
 });
 
 test("includes the extended planning controls", async () => {
@@ -143,7 +145,7 @@ test("defines accessible light and dark themes with distinguishable chart series
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(css, /html\[data-theme="dark"\]/);
-  assert.match(css, /--bg: #f5f5f5/);
+  assert.match(css, /--bg: #f7f7fa/);
   assert.match(css, /--bg: #0d0d0d/);
   assert.match(css, /\.gbm-stroke \{[^}]*stroke-dasharray: 11 6/s);
   assert.match(css, /\.real-stroke \{[^}]*stroke-dasharray: 3 7/s);
@@ -186,6 +188,29 @@ test("clamps hostile and locale-formatted financial inputs", async () => {
   assert.equal(values.sanitizeInflationRate("1e309"), 100);
   assert.equal(values.sanitizePercentRate("-10"), 0);
   assert.equal(Number.isFinite(values.sanitizeMoney(Number.POSITIVE_INFINITY)), true);
+});
+
+test("validates the savings reference sheet and UDI protection math", async () => {
+  const source = await readFile(new URL("../app/lib/savings-options.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`;
+  const catalog = await import(moduleUrl);
+  const validation = catalog.calculateReferenceValidation(8.843769, 30);
+
+  assert.equal(catalog.SAVINGS_OPTIONS.length, 19);
+  assert.equal(validation.investedTotal, 250000);
+  assert.equal(validation.weightedRate, 13.46);
+  assert.equal(validation.rowInterestTotal, 2819.68);
+  assert.equal(validation.rowTaxTotal, 77.7);
+  assert.equal(validation.rowTotalDifference, 0.02);
+  assert.equal(validation.simpleInterestTotal, 2765.75);
+  assert.equal(validation.simpleInterestDifference, -53.91);
+  assert.equal(validation.prosofipoProtection, 221094.23);
+  assert.equal(validation.ipabProtection, 3537507.6);
+  assert.match(source, /Klar garantía/);
+  assert.match(source, /La hoja marca PROSOFIPO/);
 });
 
 test("builds a formatted and reimportable Excel workbook", async () => {

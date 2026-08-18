@@ -2251,3 +2251,99 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
   .account-selector button { flex: 0 0 auto; }
 }
 
+/* ============================================================
+   Catálogo de ahorro · datos verificables y actualizables
+   ============================================================ */
+
+.reference-options-panel { margin: 0 0 16px; overflow: hidden; scroll-margin-top: 90px; }
+.reference-options-panel details > summary { list-style: none; }
+.reference-options-panel details > summary::-webkit-details-marker { display: none; }
+.reference-options-summary { align-items: center; background: var(--surface); cursor: pointer; display: flex; gap: 16px; justify-content: space-between; min-height: 76px; padding: 12px 20px; }
+.reference-options-summary:hover { background: var(--surface-soft); }
+.reference-summary-copy { display: grid; gap: 3px; min-width: 0; }
+.reference-summary-copy .eyebrow { margin: 0; }
+.reference-summary-copy strong { font-size: 16px; }
+.reference-summary-copy small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-summary-mark { align-items: center; background: var(--surface-elevated); border-radius: 50%; color: var(--ink-soft); display: inline-flex; flex: 0 0 auto; font-size: 0; height: 32px; justify-content: center; width: 32px; }
+.reference-summary-mark::after { content: "+"; font-size: 20px; line-height: 1; }
+.reference-options-panel details[open] .reference-summary-mark { background: var(--ink); color: var(--bg); }
+.reference-options-panel details[open] .reference-summary-mark::after { content: "−"; }
+.reference-options-body { border-top: 1px solid var(--line-soft); display: grid; gap: 16px; padding: 18px 20px 20px; }
+.reference-review-note { align-items: flex-start; background: var(--orange-light); border: 1px solid color-mix(in srgb, var(--orange) 30%, transparent); border-radius: 12px; color: var(--ink-soft); display: flex; gap: 10px; padding: 12px 13px; }
+.reference-review-icon { align-items: center; background: var(--surface); border: 1px solid color-mix(in srgb, var(--orange) 35%, transparent); border-radius: 50%; color: var(--orange); display: inline-flex; flex: 0 0 auto; font-size: 11px; font-weight: 800; height: 20px; justify-content: center; margin-top: 1px; width: 20px; }
+.reference-review-note p { font-size: 12.5px; line-height: 1.5; margin: 0; }
+.reference-review-note strong { color: var(--orange); }
+.reference-controls { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.reference-controls label { color: var(--muted); display: grid; font-size: 12px; font-weight: 700; gap: 7px; }
+.reference-controls label > span { align-items: baseline; display: flex; gap: 6px; }
+.reference-controls label small { color: var(--faint); font-size: 11px; font-weight: 500; }
+.reference-input { align-items: center; background: var(--input-bg); border: 1px solid var(--line); border-radius: 10px; display: flex; min-height: 44px; overflow: hidden; }
+.reference-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+.reference-input input { background: transparent; border: 0; color: var(--ink); font-family: var(--font-num); font-size: 15px; font-weight: 650; min-width: 0; outline: 0; padding: 9px 8px 9px 12px; width: 100%; }
+.reference-input b { color: var(--muted); font-size: 11px; padding-right: 12px; }
+.reference-validation-grid { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.reference-validation-grid article { background: var(--surface-soft); border: 1px solid var(--line-soft); border-radius: 12px; display: grid; gap: 4px; min-width: 0; padding: 13px 14px; }
+.reference-validation-grid article.is-warning { background: var(--orange-light); border-color: color-mix(in srgb, var(--orange) 28%, transparent); }
+.reference-validation-grid span, .reference-validation-grid small { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+.reference-validation-grid strong { font-family: var(--font-num); font-size: 18px; font-variant-numeric: tabular-nums; letter-spacing: -0.4px; }
+.reference-validation-grid article.is-warning strong { color: var(--orange); }
+.reference-protection-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.reference-protection-grid article { background: var(--surface-accent); border: 1px solid var(--accent-soft); border-radius: 12px; display: grid; gap: 4px; min-width: 0; padding: 13px 14px; }
+.reference-protection-grid span, .reference-protection-grid small { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.reference-protection-grid strong { color: var(--accent-strong); font-family: var(--font-num); font-size: 19px; font-variant-numeric: tabular-nums; }
+.reference-source-strip { align-items: center; border-bottom: 1px solid var(--line-soft); border-top: 1px solid var(--line-soft); color: var(--muted); display: flex; flex-wrap: wrap; font-size: 11.5px; gap: 8px 12px; padding: 10px 0; }
+.reference-source-strip a, .reference-option-source { color: var(--accent); font-weight: 750; text-decoration: none; }
+.reference-source-strip a:hover, .reference-option-source:hover { text-decoration: underline; text-underline-offset: 3px; }
+.reference-source-strip > span:last-child { color: var(--faint); margin-left: auto; }
+.reference-option-group { display: grid; gap: 10px; }
+.reference-group-heading { align-items: end; display: flex; gap: 12px; justify-content: space-between; }
+.reference-group-heading .eyebrow { margin: 0 0 4px; }
+.reference-group-heading h3 { font-size: 18px; letter-spacing: -0.3px; margin: 0; }
+.reference-group-heading > span { color: var(--muted); font-size: 11.5px; }
+.reference-option-grid { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.reference-option-card { background: var(--surface); border: 1px solid var(--line); border-radius: 13px; display: grid; gap: 10px; min-width: 0; padding: 14px; }
+.reference-option-card.status-verified { border-top: 3px solid var(--reserve); }
+.reference-option-card.status-partial { border-top: 3px solid var(--orange); }
+.reference-option-card.status-review { border-top: 3px solid var(--expense); }
+.reference-option-head { align-items: start; display: flex; gap: 8px; justify-content: space-between; }
+.reference-option-head h4 { font-size: 14px; line-height: 1.25; margin: 0; }
+.reference-status { border-radius: 999px; flex: 0 0 auto; font-size: 10px; font-weight: 800; padding: 4px 7px; }
+.reference-status.verified { background: var(--mint-light); color: var(--reserve); }
+.reference-status.partial { background: var(--orange-light); color: var(--orange); }
+.reference-status.review { background: var(--red-light); color: var(--expense); }
+.reference-option-metrics { display: grid; gap: 7px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.reference-option-metrics > div { display: grid; gap: 2px; min-width: 0; }
+.reference-option-metrics span, .reference-option-metrics small { color: var(--muted); font-size: 10.5px; line-height: 1.25; }
+.reference-option-metrics strong { font-size: 13px; overflow-wrap: anywhere; }
+.reference-option-metrics small { color: var(--orange); }
+.reference-option-report { align-items: baseline; background: var(--surface-soft); border-radius: 9px; display: grid; gap: 2px 8px; grid-template-columns: minmax(0, 1fr) auto; padding: 8px 9px; }
+.reference-option-report span, .reference-option-report small { color: var(--muted); font-size: 10.5px; }
+.reference-option-report strong { font-family: var(--font-num); font-size: 14px; grid-row: span 2; }
+.reference-option-requirement { border-top: 1px solid var(--line-soft); color: var(--muted); display: grid; font-size: 11.5px; gap: 2px; margin: 0; padding-top: 8px; }
+.reference-option-requirement strong { color: var(--ink-soft); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.reference-option-note { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 0; }
+.reference-option-source { align-items: center; display: inline-flex; font-size: 11px; gap: 5px; margin-top: auto; }
+.reference-maintenance-note { background: var(--surface-soft); border-left: 3px solid var(--accent); color: var(--muted); font-size: 11.5px; line-height: 1.5; margin: 0; padding: 10px 12px; }
+.reference-maintenance-note code { color: var(--ink-soft); font-family: var(--font-num); font-size: 10.5px; }
+
+@media (max-width: 1023px) {
+  .reference-option-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reference-validation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 699px) {
+  .reference-options-summary { min-height: 68px; padding: 10px 16px; }
+  .reference-summary-copy strong { font-size: 14px; }
+  .reference-summary-copy small { font-size: 11px; }
+  .reference-options-body { padding: 14px 16px 16px; }
+  .reference-controls, .reference-protection-grid { grid-template-columns: 1fr; }
+  .reference-validation-grid { gap: 7px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reference-validation-grid article { padding: 11px; }
+  .reference-validation-grid strong { font-size: 15px; }
+  .reference-source-strip { align-items: flex-start; display: grid; gap: 5px; }
+  .reference-source-strip > span:last-child { margin-left: 0; }
+  .reference-option-grid { grid-template-columns: 1fr; }
+  .reference-group-heading h3 { font-size: 17px; }
+  .reference-option-card { padding: 13px; }
+}
+
