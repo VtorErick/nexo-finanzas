@@ -12,6 +12,12 @@ import {
 } from "react";
 import { captureNexoScreenshots, exportNexoWorkbook, importNexoWorkbook } from "./lib/nexo-workbook";
 import {
+  CATEGORY_ICON_OPTIONS,
+  DEFAULT_TRANSACTION_CATEGORIES,
+  type CategoryIconName,
+  type TransactionCategory,
+} from "./lib/nexo-categories";
+import {
   calculateReferenceValidation,
   REFERENCE_SHEET,
   SAVINGS_OPTIONS,
@@ -74,6 +80,7 @@ type StoredSnapshot = {
   extras?: ExtraIncome[];
   events?: CalendarEvent[];
   transactions?: Transaction[];
+  categories?: TransactionCategory[];
   dataMode?: DataMode;
   savedAt?: number;
 };
@@ -176,6 +183,11 @@ function formatHeadingDate(date: Date) {
     month: "long",
     timeZone: MEXICO_TIME_ZONE,
   }).toLocaleUpperCase("es-MX");
+}
+
+function formatMonthGroupLabel(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1, 12).toLocaleDateString("es-MX", { month: "long", year: "numeric" }).toLocaleUpperCase("es-MX");
 }
 
 function formatDurationMonths(months: number | null) {
@@ -522,6 +534,37 @@ function normalizeStoredTransactions(value: unknown, accounts: Account[]) {
   return normalized.sort((a, b) => b.date.localeCompare(a.date));
 }
 
+function normalizeStoredCategories(value: unknown, transactions: Transaction[] = []) {
+  const normalized = DEFAULT_TRANSACTION_CATEGORIES.map((category) => ({ ...category }));
+  const ids = new Set(normalized.map((category) => category.id));
+  const labels = new Set(normalized.map((category) => category.label.toLocaleLowerCase("es-MX")));
+  const validIcons = new Set(CATEGORY_ICON_OPTIONS.map((option) => option.id));
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      if (!item || typeof item !== "object") return;
+      const category = item as Partial<TransactionCategory>;
+      const label = safeText(category.label).trim();
+      const labelKey = label.toLocaleLowerCase("es-MX");
+      if (!label || labels.has(labelKey)) return;
+      const id = safeText(category.id).trim() || `custom-category-${index + 1}`;
+      if (ids.has(id)) return;
+      normalized.push({ id, label, icon: validIcons.has(category.icon as CategoryIconName) ? category.icon as CategoryIconName : "general", custom: true });
+      ids.add(id);
+      labels.add(labelKey);
+    });
+  }
+
+  transactions.forEach((transaction, index) => {
+    const label = transaction.category.trim();
+    const labelKey = label.toLocaleLowerCase("es-MX");
+    if (!label || labels.has(labelKey)) return;
+    normalized.push({ id: `legacy-category-${index + 1}`, label, icon: "general", custom: true });
+    labels.add(labelKey);
+  });
+  return normalized;
+}
+
 function normalizeStoredExtras(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item, index): ExtraIncome[] => {
@@ -560,7 +603,7 @@ function BrandMark() {
   return <span className="brand-mark" aria-hidden="true">N</span>;
 }
 
-type IconName = "home" | "wallet" | "calendar" | "trend" | "database" | "sun" | "moon" | "shield" | "cash" | "download" | "target";
+type IconName = "home" | "wallet" | "calendar" | "trend" | "database" | "sun" | "moon" | "shield" | "cash" | "download" | "target" | "food" | "car" | "services" | "health" | "shopping" | "education" | "entertainment" | "travel" | "work" | "general";
 const ICONS: Record<IconName, ReactNode> = {
   home: (<><path d="M3.5 10.4 12 3.5l8.5 6.9" /><path d="M5.5 9.6V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.6" /><path d="M9.5 21v-5.5h5V21" /></>),
   wallet: (<><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z" /><path d="M14.5 10.5H20v4h-5.5a2 2 0 0 1 0-4z" /></>),
@@ -573,6 +616,16 @@ const ICONS: Record<IconName, ReactNode> = {
   cash: (<><rect x="3" y="6.5" width="18" height="11" rx="2" /><circle cx="12" cy="12" r="2.6" /><path d="M6.3 9.7v.01M17.7 14.3v.01" /></>),
   download: (<><path d="M12 3.5V15" /><path d="M7.5 10.5 12 15l4.5-4.5" /><path d="M4.5 20.5h15" /></>),
   target: (<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.8" /><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /></>),
+  food: (<><path d="M5 4v7M8 4v7M5 8h3M6.5 11v9" /><path d="M15.5 4v16M15.5 4c2 1.4 3 3.3 3 5.5v.5h-3" /></>),
+  car: (<><path d="m5 11 1.5-4h11l1.5 4" /><path d="M4 11h16v6H4z" /><circle cx="7.5" cy="17" r="1.5" /><circle cx="16.5" cy="17" r="1.5" /><path d="M4 13h2M18 13h2" /></>),
+  services: (<path d="m13 2-8 11h6l-1 9 8-12h-6z" />),
+  health: (<><path d="M12 5v14M5 12h14" /><rect x="4" y="4" width="16" height="16" rx="4" /></>),
+  shopping: (<><path d="M5 8h14l-1 12H6z" /><path d="M9 9V6a3 3 0 0 1 6 0v3" /></>),
+  education: (<><path d="m3 9 9-5 9 5-9 5z" /><path d="M7 11v5c2.8 2 7.2 2 10 0v-5M21 9v7" /></>),
+  entertainment: (<><circle cx="12" cy="12" r="9" /><path d="m10 8 5 4-5 4z" /></>),
+  travel: (<><path d="m3 12 18-5-5 18-3-8z" /><path d="m13 17-4 4M13 17l-3-5" /></>),
+  work: (<><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2" /></>),
+  general: (<><circle cx="12" cy="12" r="8.5" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></>),
 };
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
@@ -699,6 +752,7 @@ function GoalRing({ progress }: { progress: number }) {
 }
 
 type CashflowPoint = { key: string; label: string; income: number; expense: number };
+type TransactionMonthGroup = { key: string; label: string; transactions: Transaction[]; income: number; expense: number };
 
 function CashflowChart({ data }: { data: CashflowPoint[] }) {
   const maxValue = Math.max(1, ...data.flatMap((point) => [point.income, point.expense]));
@@ -725,6 +779,11 @@ function CashflowChart({ data }: { data: CashflowPoint[] }) {
 
 function TransactionMark({ kind }: { kind: TransactionKind }) {
   return <span className={`transaction-mark ${kind}`} aria-hidden="true">{kind === "income" ? "+" : kind === "expense" ? "−" : "↔"}</span>;
+}
+
+function CategoryMark({ category, categories, kind }: { category: string; categories: TransactionCategory[]; kind: TransactionKind }) {
+  const definition = categories.find((item) => item.label.toLocaleLowerCase("es-MX") === category.trim().toLocaleLowerCase("es-MX"));
+  return <span className={`category-mark ${kind}`} title={category} aria-hidden="true"><Icon name={definition?.icon ?? "general"} size={18} /></span>;
 }
 
 function ProjectionChart({
@@ -934,6 +993,7 @@ export default function Home() {
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>(() => createExampleEvents(today));
   const [transactions, setTransactions] = useState<Transaction[]>(() => createExampleTransactions(today));
+  const [categories, setCategories] = useState<TransactionCategory[]>(() => DEFAULT_TRANSACTION_CATEGORIES.map((category) => ({ ...category })));
   const [transactionEditorOpen, setTransactionEditorOpen] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [transactionDraft, setTransactionDraft] = useState<TransactionDraft>(() => ({
@@ -949,7 +1009,12 @@ export default function Home() {
   }));
   const [transactionError, setTransactionError] = useState("");
   const [activityFilter, setActivityFilter] = useState<"all" | TransactionKind>("all");
+  const [activityCategory, setActivityCategory] = useState("all");
   const [activitySearch, setActivitySearch] = useState("");
+  const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
+  const [categoryDraftName, setCategoryDraftName] = useState("");
+  const [categoryDraftIcon, setCategoryDraftIcon] = useState<CategoryIconName>("general");
+  const [categoryError, setCategoryError] = useState("");
   const [planMode, setPlanMode] = useState<"projection" | "schedule">("projection");
   const [eventEditorOpen, setEventEditorOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
@@ -1049,9 +1114,22 @@ export default function Home() {
     const query = activitySearch.trim().toLocaleLowerCase("es-MX");
     return transactions
       .filter((transaction) => activityFilter === "all" || transaction.kind === activityFilter)
+      .filter((transaction) => activityCategory === "all" || transaction.category === activityCategory)
       .filter((transaction) => !query || `${transaction.title} ${transaction.category} ${transaction.note}`.toLocaleLowerCase("es-MX").includes(query))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, activityFilter, activitySearch]);
+  }, [transactions, activityFilter, activityCategory, activitySearch]);
+  const groupedTransactions = useMemo<TransactionMonthGroup[]>(() => {
+    const groups = new Map<string, TransactionMonthGroup>();
+    filteredTransactions.forEach((transaction) => {
+      const key = transaction.date.slice(0, 7);
+      const group = groups.get(key) ?? { key, label: formatMonthGroupLabel(key), transactions: [], income: 0, expense: 0 };
+      group.transactions.push(transaction);
+      if (transaction.kind === "income") group.income += transaction.amount;
+      if (transaction.kind === "expense") group.expense += transaction.amount;
+      groups.set(key, group);
+    });
+    return Array.from(groups.values());
+  }, [filteredTransactions]);
   const allocation = [
     { key: "cash", label: "Disponible", value: cash, color: "var(--cash)" },
     { key: "reserve", label: "Reserva", value: reserve, color: "var(--reserve)" },
@@ -1126,13 +1204,15 @@ export default function Home() {
           if (typeof data.inflationRateText === "string") setInflationRateText(String(sanitizeInflationRate(data.inflationRateText)));
           if (typeof data.brokerFeeText === "string") setBrokerFeeText(String(sanitizePercentRate(data.brokerFeeText)));
           if (typeof data.capitalGainsTaxText === "string") setCapitalGainsTaxText(String(sanitizePercentRate(data.capitalGainsTaxText)));
-          if (Array.isArray(data.extras)) setExtras(normalizeStoredExtras(data.extras));
-          if (Array.isArray(data.events)) setEvents(normalizeStoredEvents(data.events));
-          const savedMode = data.dataMode === "imported" || data.dataMode === "personal" ? data.dataMode : "example";
-          setTransactions(Array.isArray(data.transactions)
-            ? normalizeStoredTransactions(data.transactions, loadedAccounts)
-            : savedMode === "example" ? createExampleTransactions(today) : []);
-          setDataMode(savedMode);
+           if (Array.isArray(data.extras)) setExtras(normalizeStoredExtras(data.extras));
+           if (Array.isArray(data.events)) setEvents(normalizeStoredEvents(data.events));
+           const savedMode = data.dataMode === "imported" || data.dataMode === "personal" ? data.dataMode : "example";
+           const loadedTransactions = Array.isArray(data.transactions)
+             ? normalizeStoredTransactions(data.transactions, loadedAccounts)
+             : savedMode === "example" ? createExampleTransactions(today) : [];
+           setTransactions(loadedTransactions);
+           setCategories(normalizeStoredCategories(data.categories, loadedTransactions));
+           setDataMode(savedMode);
           if (typeof data.savedAt === "number" && Number.isFinite(data.savedAt)) setLastSavedAt(data.savedAt);
         }
       } catch {
@@ -1159,11 +1239,12 @@ export default function Home() {
         gbmRateText,
         inflationRateText,
         brokerFeeText,
-        capitalGainsTaxText,
-        extras,
-        events,
-        transactions,
-        dataMode,
+         capitalGainsTaxText,
+         extras,
+         events,
+         transactions,
+         categories,
+         dataMode,
         savedAt,
       }));
       storageWarningShownRef.current = false;
@@ -1177,7 +1258,7 @@ export default function Home() {
       }, 0);
     }
     return () => window.clearTimeout(statusTimer);
-  }, [storageReady, accounts, emergencyIds, years, targetText, monthlyExpensesText, reserveRateText, gbmRateText, inflationRateText, brokerFeeText, capitalGainsTaxText, extras, events, transactions, dataMode]);
+  }, [storageReady, accounts, emergencyIds, years, targetText, monthlyExpensesText, reserveRateText, gbmRateText, inflationRateText, brokerFeeText, capitalGainsTaxText, extras, events, transactions, categories, dataMode]);
 
   useEffect(() => {
     if (!editing) return;
@@ -1270,6 +1351,7 @@ export default function Home() {
     setEmergencyIds([]);
     setDraftEmergencyIds([]);
     setTransactions([]);
+    setCategories(DEFAULT_TRANSACTION_CATEGORIES.map((category) => ({ ...category })));
     setEvents([]);
     setExtras([]);
     setSelectedDraftAccountId(starterAccounts[0].id);
@@ -1306,6 +1388,8 @@ export default function Home() {
     setEditingTransactionId(null);
     setTransactionDraft(newTransactionDraft(kind, destinationId));
     setTransactionError("");
+    setCategoryEditorOpen(false);
+    setCategoryError("");
     setTransactionEditorOpen(true);
   }
 
@@ -1314,7 +1398,41 @@ export default function Home() {
     setEditingTransactionId(transaction.id);
     setTransactionDraft({ ...transaction, amountText: formatNumberInput(transaction.amount) });
     setTransactionError("");
+    setCategoryEditorOpen(false);
+    setCategoryError("");
     setTransactionEditorOpen(true);
+  }
+
+  function openCategoryCreator() {
+    setCategoryDraftName("");
+    setCategoryDraftIcon("general");
+    setCategoryError("");
+    setCategoryEditorOpen(true);
+  }
+
+  function saveCategory() {
+    const label = categoryDraftName.trim();
+    if (!label) {
+      setCategoryError("Escribe un nombre para la categoría.");
+      return;
+    }
+    if (categories.some((category) => category.label.toLocaleLowerCase("es-MX") === label.toLocaleLowerCase("es-MX"))) {
+      setCategoryError("Ya existe una categoría con ese nombre.");
+      return;
+    }
+    const category: TransactionCategory = { id: createClientId("category"), label, icon: categoryDraftIcon, custom: true };
+    setCategories((current) => [...current, category]);
+    setTransactionDraft((current) => ({ ...current, category: label }));
+    setCategoryEditorOpen(false);
+    setCategoryError("");
+    markDataPersonal();
+    showToast(`Categoría “${label}” creada.`);
+  }
+
+  function clearActivityFilters() {
+    setActivityFilter("all");
+    setActivityCategory("all");
+    setActivitySearch("");
   }
 
   function adjustAccountsForTransaction(current: Account[], transaction: Pick<Transaction, "kind" | "amount" | "accountId" | "toAccountId">, direction: 1 | -1) {
@@ -1619,6 +1737,7 @@ export default function Home() {
         extras,
         events,
         transactions,
+        categories,
       }, screenshots, `nexo-respaldo-${todayIso}.xlsx`);
       setBackupStatus(`Excel descargado: ${accounts.length} cuentas, ${transactions.length} operaciones, ${events.length} movimientos planeados y ${extras.length} ${extras.length === 1 ? "escenario" : "escenarios"}.`);
     } catch (error) {
@@ -1647,9 +1766,11 @@ export default function Home() {
       setInflationRateText(String(data.inflationRate));
       setBrokerFeeText(String(data.brokerFee));
       setCapitalGainsTaxText(String(data.capitalGainsTax));
-      setExtras(data.extras);
-      setEvents(data.events.map((item) => normalizeEvent(item)));
-      setTransactions(data.transactions.map((item) => normalizeTransaction(item)));
+       setExtras(data.extras);
+       setEvents(data.events.map((item) => normalizeEvent(item)));
+       const importedTransactions = data.transactions.map((item) => normalizeTransaction(item));
+       setTransactions(importedTransactions);
+       setCategories(normalizeStoredCategories(data.categories, importedTransactions));
       setDataMode("imported");
       setBackupStatus(`Excel importado: ${data.accounts.length} cuentas, ${data.transactions.length} operaciones y ${data.events.length} movimientos planeados.`);
     } catch {
@@ -1697,7 +1818,9 @@ export default function Home() {
     setTransactionDraft(newTransactionDraft("expense"));
     setTransactionError("");
     setActivityFilter("all");
+    setActivityCategory("all");
     setActivitySearch("");
+    setCategories(DEFAULT_TRANSACTION_CATEGORIES.map((category) => ({ ...category })));
     setEventEditorOpen(false);
     setEditingEventId(null);
     setEventDraft(createEventDraft(today));
@@ -1834,7 +1957,7 @@ export default function Home() {
             <div className="transaction-list compact-list">
               {transactions.slice(0, 5).map((transaction) => (
                 <button className="transaction-row" key={transaction.id} onClick={() => openTransactionEditor(transaction)}>
-                  <TransactionMark kind={transaction.kind} />
+                  <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
                   <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}</small></span>
                   <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "")}</span>
                   <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatMoney(transaction.amount)}</strong>
@@ -1862,26 +1985,38 @@ export default function Home() {
           </section>
 
           <section className="panel ledger-card">
-            <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Todos los movimientos</h2></div><label className="search-field"><span aria-hidden="true">⌕</span><input type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} /></label></div>
+            <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Movimientos por mes</h2><p>Encuentra una operación por tipo, categoría o concepto.</p></div><label className="search-field"><span aria-hidden="true">⌕</span><input type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} /></label></div>
             <div className="ledger-toolbar">
-              <div className="filter-tabs" aria-label="Filtrar actividad">
-                {(["all", "income", "expense", "transfer"] as const).map((filter) => <button key={filter} className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "all" ? "Todo" : filter === "income" ? "Ingresos" : filter === "expense" ? "Gastos" : "Transferencias"}</button>)}
+              <div className="activity-filter-controls">
+                <div className="filter-tabs" aria-label="Filtrar actividad">
+                  {(["all", "income", "expense", "transfer"] as const).map((filter) => <button type="button" key={filter} className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)}>{filter === "all" ? "Todo" : filter === "income" ? "Ingresos" : filter === "expense" ? "Gastos" : "Transferencias"}</button>)}
+                </div>
+                <label className="category-filter"><span>Categoría</span><select aria-label="Filtrar por categoría" value={activityCategory} onChange={(event) => setActivityCategory(event.target.value)}><option value="all">Todas</option>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
+                {(activityFilter !== "all" || activityCategory !== "all" || activitySearch) && <button type="button" className="filter-clear" onClick={clearActivityFilters}>Limpiar filtros</button>}
               </div>
-              <span>{filteredTransactions.length} resultado{filteredTransactions.length === 1 ? "" : "s"}</span>
+              <span className="ledger-result-count">{filteredTransactions.length} resultado{filteredTransactions.length === 1 ? "" : "s"} · {groupedTransactions.length} {groupedTransactions.length === 1 ? "mes" : "meses"}</span>
             </div>
             {filteredTransactions.length === 0 ? (
               <div className="empty-state"><span>⌕</span><div><strong>No encontramos movimientos</strong><p>Prueba otro filtro o registra una operación nueva.</p></div></div>
             ) : (
-              <div className="transaction-list">
-                {filteredTransactions.map((transaction) => (
-                  <div className="transaction-row" key={transaction.id}>
-                    <TransactionMark kind={transaction.kind} />
-                    <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}{transaction.note ? ` · ${transaction.note}` : ""}</small></span>
-                    <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }).replace(".", "")}</span>
-                    <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatMoney(transaction.amount)}</strong>
-                    <details className="movement-menu"><summary aria-label={`Acciones para ${transaction.title}`}><span aria-hidden="true">•••</span></summary><div className="movement-menu-items"><button onClick={() => openTransactionEditor(transaction)}>Editar</button><button className="danger-link" onClick={() => removeTransaction(transaction)}>Eliminar</button></div></details>
-                  </div>
-                ))}
+              <div className="activity-month-groups">
+                {groupedTransactions.map((group) => {
+                  const monthNet = group.income - group.expense;
+                  return <section className="activity-month-group" key={group.key} aria-labelledby={`activity-month-${group.key}`}>
+                    <div className="activity-month-heading"><div><span className="eyebrow" id={`activity-month-${group.key}`}>{group.label}</span><small>{group.transactions.length} movimiento{group.transactions.length === 1 ? "" : "s"}</small></div><strong className={monthNet >= 0 ? "positive-value" : "negative-value"}>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}<small>flujo neto</small></strong></div>
+                    <div className="transaction-list">
+                      {group.transactions.map((transaction) => (
+                        <div className="transaction-row" key={transaction.id}>
+                          <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
+                          <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}{transaction.note ? ` · ${transaction.note}` : ""}</small></span>
+                          <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }).replace(".", "")}</span>
+                          <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatMoney(transaction.amount)}</strong>
+                          <details className="movement-menu"><summary aria-label={`Acciones para ${transaction.title}`}><span aria-hidden="true">•••</span></summary><div className="movement-menu-items"><button onClick={() => openTransactionEditor(transaction)}>Editar</button><button className="danger-link" onClick={() => removeTransaction(transaction)}>Eliminar</button></div></details>
+                        </div>
+                      ))}
+                    </div>
+                  </section>;
+                })}
               </div>
             )}
           </section>
@@ -2153,7 +2288,16 @@ export default function Home() {
               <label>Fecha<input type="date" value={transactionDraft.date} onChange={(event) => setTransactionDraft((current) => ({ ...current, date: event.target.value }))} /></label>
               <label>{transactionDraft.kind === "transfer" ? "Desde" : "Cuenta"}<select value={transactionDraft.accountId} onChange={(event) => setTransactionDraft((current) => ({ ...current, accountId: event.target.value, toAccountId: current.toAccountId === event.target.value ? accounts.find((account) => account.id !== event.target.value)?.id ?? null : current.toAccountId }))}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>
               {transactionDraft.kind === "transfer" && <label>Hacia<select value={transactionDraft.toAccountId ?? ""} onChange={(event) => setTransactionDraft((current) => ({ ...current, toAccountId: event.target.value || null }))}><option value="">Selecciona destino</option>{accounts.filter((account) => account.id !== transactionDraft.accountId).map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>}
-              <label>Categoría<input type="text" list="transaction-categories" placeholder="General" value={transactionDraft.category} onChange={(event) => setTransactionDraft((current) => ({ ...current, category: event.target.value }))} /><datalist id="transaction-categories"><option value="Alimentos" /><option value="Vivienda" /><option value="Transporte" /><option value="Servicios" /><option value="Salud" /><option value="Trabajo" /><option value="Ahorro" /><option value="Inversión" /><option value="Entretenimiento" /></datalist></label>
+              <div className="category-editor-field">
+                <label>Categoría<select aria-label="Categoría del movimiento" value={transactionDraft.category} onChange={(event) => setTransactionDraft((current) => ({ ...current, category: event.target.value }))}>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
+                <button type="button" className="inline-add-button" onClick={openCategoryCreator}>+ Nueva categoría</button>
+                {categoryEditorOpen && <div className="category-creator" aria-label="Crear categoría">
+                  <label>Nombre<input type="text" placeholder="Ej. Mascotas" value={categoryDraftName} onChange={(event) => setCategoryDraftName(event.target.value)} /></label>
+                  <div className="category-icon-picker" role="group" aria-label="Icono de la categoría">{CATEGORY_ICON_OPTIONS.map((option) => <button type="button" key={option.id} className={categoryDraftIcon === option.id ? "active" : ""} aria-label={`Icono ${option.label}`} title={option.label} onClick={() => setCategoryDraftIcon(option.id)}><Icon name={option.id} size={17} /></button>)}</div>
+                  {categoryError && <small className="form-error category-error" role="alert">{categoryError}</small>}
+                  <div className="category-creator-actions"><button type="button" className="secondary-button" onClick={() => setCategoryEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveCategory}>Crear categoría</button></div>
+                </div>}
+              </div>
               <label className="transaction-note-field">Nota <span className="optional">opcional</span><input type="text" placeholder="Agrega contexto útil" value={transactionDraft.note} onChange={(event) => setTransactionDraft((current) => ({ ...current, note: event.target.value }))} /></label>
             </div>
 

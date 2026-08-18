@@ -60,6 +60,12 @@ export type WorkbookTransaction = {
   note: string;
 };
 
+export type WorkbookCategory = {
+  id: string;
+  label: string;
+  icon: string;
+};
+
 export type WorkbookBackup = {
   dataMode: "example" | "personal" | "imported";
   accounts: WorkbookAccount[];
@@ -75,6 +81,7 @@ export type WorkbookBackup = {
   extras: WorkbookExtra[];
   events: WorkbookEvent[];
   transactions: WorkbookTransaction[];
+  categories?: WorkbookCategory[];
 };
 
 export type WorkbookScreenshot = {
@@ -454,6 +461,7 @@ function addConfigSheet(workbook: import("exceljs").Workbook, data: WorkbookBack
     ["Inflacion", data.inflationRate],
     ["ComisionTradingMX", data.brokerFee],
     ["ImpuestoGanancia", data.capitalGainsTax],
+    ...(data.categories ?? []).map((category) => [`Categoria:${category.id}`, `${category.label}|${category.icon}`] as [string, string]),
   ];
   rows.forEach((row, index) => { sheet.getRow(index + 6).values = row; });
   sheet.columns = [{ width: 28 }, { width: 38 }];
@@ -555,6 +563,12 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
   const config = new Map<string, unknown>();
   configSheet.eachRow((row) => config.set(textValue(row.getCell(1).value), excelValue(row.getCell(2).value)));
   if (config.get("Formato") !== "NEXO_XLSX_BACKUP" || numberValue(config.get("Versión")) < 5) throw new Error("Formato de respaldo no compatible");
+  const categories = Array.from(config.entries()).flatMap(([key, value]) => {
+    if (!key.startsWith("Categoria:")) return [];
+    const [label, icon] = textValue(value).split("|");
+    if (!label) return [];
+    return [{ id: key.slice("Categoria:".length), label, icon: icon || "general" }];
+  });
 
   const accountHeaders = ["ID", "Cuenta", "Tipo", "Saldo (MXN)", "Rendimiento / estado", "Nota", "Fondo de emergencia"];
   const accountRows = tableRows(accountsSheet, accountHeaders);
@@ -641,5 +655,6 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
     extras,
     events,
     transactions,
+    categories,
   };
 }

@@ -70,6 +70,8 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /Opciones, tasas y protección/);
   assert.match(html, /UDI de referencia/);
   assert.match(html, /RUTA RÁPIDA/);
+  assert.match(html, /Movimientos por mes/);
+  assert.match(html, /Filtrar por categoría/);
 });
 
 test("includes the extended planning controls", async () => {
@@ -137,6 +139,7 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /const coverageMonths = monthlyExpenses > 0/);
   assert.match(source, /Ruta rápida para usar Plan/);
   assert.match(source, /Define el horizonte/);
+  assert.match(source, /Nueva categoría/);
   assert.match(source, /Cómo se forma la proyección/);
   assert.match(source, /disponibles no se proyectan/);
   assert.doesNotMatch(source, /SIGUIENTE ACCIÓN/);
@@ -235,6 +238,7 @@ test("builds a formatted and reimportable Excel workbook", async () => {
   assert.match(source, /makeExcelCompatible/);
   assert.match(source, /ComisionTradingMX/);
   assert.match(source, /ImpuestoGanancia/);
+  assert.match(source, /Categoria:\$\{category\.id\}/);
   assert.match(source, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
   assert.match(source, /sheet\.getCell\(5, column\)\.alignment = \{ horizontal: "right"/);
   assert.doesNotMatch(source, /JSON\.stringify|JSON\.parse/);
@@ -271,6 +275,7 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
       extras: [{ id: 1, enabled: true, amount: 2500, recurring: true, frequency: "monthly", destination: "gbm", startMonth: 1, endMonth: null, monthOfYear: 1, oneTimeMonth: 1 }],
       events: [{ id: 1, date: "2026-08-15", title: "Movimiento de prueba", amount: "$3,000", detail: "Dato ficticio", numericAmount: 3000, tone: "green", kind: "contribution", destination: "gbm", includeInProjection: true, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [] }],
       transactions: [{ id: "tx-1", date: "2026-08-13", title: "Nómina de prueba", amount: 18000, kind: "income", accountId: "a1", toAccountId: null, category: "Trabajo", note: "Dato ficticio" }],
+      categories: [{ id: "trabajo", label: "Trabajo", icon: "work" }],
     };
     const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+5Q2dAAAAAElFTkSuQmCC";
     const screenshots = ["Resumen", "Cuentas", "Proyección"].map((title) => ({ title, dataUrl: image, width: 1, height: 1, extension: "png" }));
@@ -297,6 +302,8 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
     assert.equal(imported.events.length, 1);
     assert.equal(imported.extras.length, 1);
     assert.equal(imported.transactions.length, 1);
+    assert.equal(imported.categories.length, 1);
+    assert.equal(imported.categories[0].label, "Trabajo");
     assert.equal(imported.transactions[0].title, "Nómina de prueba");
     assert.equal(imported.accounts[0].label, "Cuenta de prueba");
 
