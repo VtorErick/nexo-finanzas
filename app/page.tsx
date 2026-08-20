@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useDeferredValue,
   type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -13,8 +14,11 @@ import {
 } from "react";
 import { PrimaryNavigation, type PrimaryNavigationItem } from "./components/navigation/PrimaryNavigation";
 import { ContextRail } from "./components/ui/ContextRail";
+import { ActionMenu } from "./components/ui/ActionMenu";
+import { EmptyState } from "./components/ui/EmptyState";
 import { FilterChips, type FilterChip } from "./components/ui/FilterChips";
 import { MetricCard } from "./components/ui/MetricCard";
+import { ModalShell } from "./components/ui/ModalShell";
 import { NextBestAction } from "./components/ui/NextBestAction";
 import { StatusMessage } from "./components/ui/StatusMessage";
 import { ViewHeader } from "./components/ui/ViewHeader";
@@ -1059,6 +1063,7 @@ export default function Home() {
   const [activityFilter, setActivityFilter] = useState<"all" | TransactionKind>("all");
   const [activityCategory, setActivityCategory] = useState("all");
   const [activitySearch, setActivitySearch] = useState("");
+  const [activityFiltersOpen, setActivityFiltersOpen] = useState(false);
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
   const [categoryDraftName, setCategoryDraftName] = useState("");
   const [categoryDraftIcon, setCategoryDraftIcon] = useState<CategoryIconName>("general");
@@ -1151,6 +1156,7 @@ export default function Home() {
   const monthNet = monthIncome - monthExpense;
   const savingsRate = monthIncome > 0 ? Math.max(-100, Math.min(100, (monthNet / monthIncome) * 100)) : null;
   const reserveGap = Math.max(0, target - reserve);
+  const deferredActivitySearch = useDeferredValue(activitySearch);
   const cashflowData = useMemo<CashflowPoint[]>(() => Array.from({ length: 6 }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth() - 5 + index, 1, 12);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -1163,13 +1169,13 @@ export default function Home() {
     };
   }), [transactions, today]);
   const filteredTransactions = useMemo(() => {
-    const query = activitySearch.trim().toLocaleLowerCase("es-MX");
+    const query = deferredActivitySearch.trim().toLocaleLowerCase("es-MX");
     return transactions
       .filter((transaction) => activityFilter === "all" || transaction.kind === activityFilter)
       .filter((transaction) => activityCategory === "all" || transaction.category === activityCategory)
       .filter((transaction) => !query || `${transaction.title} ${transaction.category} ${transaction.note}`.toLocaleLowerCase("es-MX").includes(query))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, activityFilter, activityCategory, activitySearch]);
+  }, [transactions, activityFilter, activityCategory, deferredActivitySearch]);
   const activityFiltersActive = activityFilter !== "all" || activityCategory !== "all" || Boolean(activitySearch.trim());
   const activityFilterChips: FilterChip[] = [
     activitySearch.trim() ? { id: "search", label: `Busca: ${activitySearch.trim()}`, onRemove: () => setActivitySearch("") } : null,
@@ -1200,6 +1206,13 @@ export default function Home() {
   ];
   const modeLabel = dataMode === "example" ? "Modo ejemplo" : dataMode === "imported" ? "Respaldo importado" : "Datos personales";
   const modeDescription = dataMode === "example" ? "Explora con información ficticia" : "Guardado privado en este dispositivo";
+  const scenarioLabel = reserveRate === 5 && gbmRate === 7 && inflationRate === 5
+    ? "Conservador"
+    : reserveRate === RESERVE_RETURN && gbmRate === GBM_RETURN && inflationRate === DEFAULT_INFLATION
+      ? "Base"
+      : reserveRate === 8 && gbmRate === 11 && inflationRate === 3.5
+        ? "Optimista"
+        : "Personalizado";
   const transactionStep = transactionDraft.amount <= 0 ? 1 : transactionDraft.title.trim() && transactionDraft.date && transactionDraft.accountId ? 3 : 2;
   const viewAnnouncement = {
     overview: "Inicio: resumen de tu dinero y siguiente acción.",
@@ -1528,6 +1541,7 @@ export default function Home() {
     setActivityFilter("all");
     setActivityCategory("all");
     setActivitySearch("");
+    setActivityFiltersOpen(false);
   }
 
   function adjustAccountsForTransaction(current: Account[], transaction: Pick<Transaction, "kind" | "amount" | "accountId" | "toAccountId">, direction: 1 | -1) {
@@ -2008,7 +2022,7 @@ export default function Home() {
                 const eventDay = Number(event.date.slice(-2));
                 const isPast = event.date < todayIso;
                 const isCompleted = isPast || event.completedDates.includes(event.date);
-                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatTransactionMoney(event.numericAmount) : "Sin monto"}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isPast ? "Fecha pasada" : isCompleted ? "Completado" : "Pendiente"}</span>{!isPast && <button type="button" className="event-primary-action" onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Reabrir" : "Hecho"}</button>}<details className="movement-menu"><summary aria-label={`Más acciones para ${event.title}`}><span aria-hidden="true">•••</span></summary><div className="movement-menu-items">{event.recurrence !== "none" && !isPast && !isCompleted && <button type="button" onClick={() => skipOccurrence(event)}>Omitir</button>}<button type="button" onClick={() => editEvent(event.sourceId)}>Editar</button><button type="button" className="danger-link" aria-label={`${event.recurrence === "none" ? "Eliminar" : "Eliminar serie"} ${event.title}`} onClick={() => removeEventSeries(event.sourceId)}>{event.recurrence === "none" ? "Eliminar" : "Eliminar serie"}</button></div></details></div></div>;
+                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatTransactionMoney(event.numericAmount) : "Sin monto"}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isPast ? "Fecha pasada" : isCompleted ? "Completado" : "Pendiente"}</span>{!isPast && <button type="button" className="event-primary-action" onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Reabrir" : "Hecho"}</button>}<ActionMenu label={`Más acciones para ${event.title}`} items={[...(event.recurrence !== "none" && !isPast && !isCompleted ? [{ label: "Omitir", onSelect: () => skipOccurrence(event) }] : []), { label: "Editar", onSelect: () => editEvent(event.sourceId) }, { label: event.recurrence === "none" ? "Eliminar" : "Eliminar serie", danger: true, onSelect: () => removeEventSeries(event.sourceId) }]} /></div></div>;
               })}
             </div>
           </div>
@@ -2111,19 +2125,19 @@ export default function Home() {
             </article>
           </section>
 
-          <section className="panel recent-panel">
-            <div className="panel-heading"><div><span className="eyebrow">RECIENTE</span><h2>Últimos movimientos</h2></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver todos <span aria-hidden="true">→</span></button></div>
-            <div className="transaction-list compact-list">
-              {transactions.slice(0, 5).map((transaction) => (
-                <button className="transaction-row" type="button" key={transaction.id} aria-label={`Editar movimiento ${transaction.title}`} onClick={() => openTransactionEditor(transaction)}>
-                  <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
-                  <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}</small></span>
-                  <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "")}</span>
-                   <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatTransactionMoney(transaction.amount)}</strong>
-                </button>
-              ))}
-            </div>
-          </section>
+           <section className="panel recent-panel">
+             <div className="panel-heading"><div><span className="eyebrow">RECIENTE</span><h2>Últimos movimientos</h2></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver todos <span aria-hidden="true">→</span></button></div>
+             {transactions.length === 0 ? <EmptyState icon="＋" title="Tu actividad aparecerá aquí" description="Registra un ingreso, gasto o transferencia para comenzar a ver el pulso de tu dinero." actions={<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button>} /> : <div className="transaction-list compact-list">
+               {transactions.slice(0, 5).map((transaction) => (
+                 <button className="transaction-row" type="button" key={transaction.id} aria-label={`Editar movimiento ${transaction.title}`} onClick={() => openTransactionEditor(transaction)}>
+                   <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
+                   <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}</small></span>
+                   <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "")}</span>
+                    <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatTransactionMoney(transaction.amount)}</strong>
+                 </button>
+               ))}
+             </div>}
+           </section>
         </div>
 
         <section id="activity-view" className="view-page activity-view" hidden={activeView !== "activity"}>
@@ -2153,18 +2167,34 @@ export default function Home() {
 
           <section className="panel ledger-card">
             <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Movimientos por mes</h2><p>Encuentra una operación por tipo, categoría o concepto.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
-            <div className="ledger-toolbar">
-              <div className="activity-filter-controls">
-                <div className="filter-tabs" role="group" aria-label="Filtrar actividad">
-                  {(["all", "income", "expense", "transfer"] as const).map((filter) => <button type="button" key={filter} className={activityFilter === filter ? "active" : ""} aria-pressed={activityFilter === filter} onClick={() => setActivityFilter(filter)}>{filter === "all" ? "Todo" : filter === "income" ? "Ingresos" : filter === "expense" ? "Gastos" : "Transferencias"}</button>)}
-                </div>
-                <label className="category-filter"><span>Categoría</span><select aria-label="Filtrar por categoría" value={activityCategory} onChange={(event) => setActivityCategory(event.target.value)}><option value="all">Todas</option>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
-              </div>
-              <span className="ledger-result-count" aria-live="polite">{filteredTransactions.length} de {transactions.length} movimiento{transactions.length === 1 ? "" : "s"} · {groupedTransactions.length} {groupedTransactions.length === 1 ? "mes" : "meses"}</span>
+             <div className="ledger-toolbar">
+               <button
+                 type="button"
+                 className="filter-toggle"
+                 aria-expanded={activityFiltersOpen}
+                 aria-controls="activity-filter-panel"
+                 onClick={() => setActivityFiltersOpen((current) => !current)}
+               >
+                 <span aria-hidden="true">☷</span>
+                 Filtros{activityFilterChips.length > 0 ? ` · ${activityFilterChips.length}` : ""}
+                 <span aria-hidden="true">{activityFiltersOpen ? "−" : "+"}</span>
+               </button>
+               <div id="activity-filter-panel" className="activity-filter-controls" data-open={activityFiltersOpen ? "true" : "false"}>
+                 <div className="filter-tabs" role="group" aria-label="Filtrar actividad">
+                   {(["all", "income", "expense", "transfer"] as const).map((filter) => <button type="button" key={filter} className={activityFilter === filter ? "active" : ""} aria-pressed={activityFilter === filter} onClick={() => setActivityFilter(filter)}>{filter === "all" ? "Todo" : filter === "income" ? "Ingresos" : filter === "expense" ? "Gastos" : "Transferencias"}</button>)}
+                 </div>
+                 <label className="category-filter"><span>Categoría</span><select aria-label="Filtrar por categoría" value={activityCategory} onChange={(event) => setActivityCategory(event.target.value)}><option value="all">Todas</option>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
+               </div>
+               <span className="ledger-result-count" aria-live="polite" aria-busy={activitySearch !== deferredActivitySearch}>{filteredTransactions.length} de {transactions.length} movimiento{transactions.length === 1 ? "" : "s"} · {groupedTransactions.length} {groupedTransactions.length === 1 ? "mes" : "meses"}</span>
             </div>
-            <FilterChips chips={activityFilterChips} onClear={clearActivityFilters} />
-            {filteredTransactions.length === 0 ? (
-              <div className="empty-state"><span>⌕</span><div><strong>{activityFiltersActive ? "No encontramos movimientos" : "Todavía no hay actividad real"}</strong><p>{activityFiltersActive ? "Prueba otro filtro o registra una operación nueva." : "Registra tu primer ingreso o gasto para comenzar a ver tu flujo mensual."}</p><div className="empty-state-actions">{activityFiltersActive && <button type="button" className="secondary-button" onClick={clearActivityFilters}>Limpiar filtros</button>}<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button></div></div></div>
+             <FilterChips chips={activityFilterChips} onClear={clearActivityFilters} />
+             {filteredTransactions.length === 0 ? (
+               <EmptyState
+                 icon="⌕"
+                 title={activityFiltersActive ? "No encontramos movimientos" : "Todavía no hay actividad real"}
+                 description={activityFiltersActive ? "Prueba otro filtro o registra una operación nueva." : "Registra tu primer ingreso o gasto para comenzar a ver tu flujo mensual."}
+                 actions={<>{activityFiltersActive && <button type="button" className="secondary-button" onClick={clearActivityFilters}>Limpiar filtros</button>}<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button></>}
+               />
             ) : (
               <div className="activity-month-groups">
                 {groupedTransactions.map((group) => {
@@ -2178,7 +2208,7 @@ export default function Home() {
                           <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}{transaction.note ? ` · ${transaction.note}` : ""}</small></span>
                           <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }).replace(".", "")}</span>
                           <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatTransactionMoney(transaction.amount)}</strong>
-                          <details className="movement-menu"><summary aria-label={`Acciones para ${transaction.title}`}><span aria-hidden="true">•••</span></summary><div className="movement-menu-items"><button type="button" onClick={() => openTransactionEditor(transaction)}>Editar</button><button type="button" className="danger-link" onClick={() => removeTransaction(transaction)}>Eliminar</button></div></details>
+                          <ActionMenu label={`Acciones para ${transaction.title}`} items={[{ label: "Editar", onSelect: () => openTransactionEditor(transaction) }, { label: "Eliminar", danger: true, onSelect: () => removeTransaction(transaction) }]} />
                         </div>
                       ))}
                     </div>
@@ -2213,8 +2243,8 @@ export default function Home() {
                 {accountGroups.map((group) => {
                   const groupAccounts = accounts.filter((account) => account.group === group.key);
                   if (groupAccounts.length === 0) return null;
-                  return <div className="account-group" role="rowgroup" key={group.key}>
-                    <div className={`account-group-heading ${group.key}`}><span><strong>{group.label}</strong><small>{group.description}</small></span><b>{formatMoney(groupAccounts.reduce((sum, account) => sum + account.amount, 0))}</b></div>
+                   return <div className="account-group" role="rowgroup" key={group.key}>
+                     <div className={`account-group-heading ${group.key}`}><span><strong>{group.label}</strong><small>{group.description} · {groupAccounts.length} {groupAccounts.length === 1 ? "cuenta" : "cuentas"} · {total > 0 ? `${Math.round((groupAccounts.reduce((sum, account) => sum + account.amount, 0) / total) * 100)}%` : "0%"} del total</small></span><b>{formatMoney(groupAccounts.reduce((sum, account) => sum + account.amount, 0))}</b></div>
                     {groupAccounts.map((account) => (
                       <div className="account-row" role="row" aria-label={`${account.label}: ${formatMoney(account.amount)}, ${group.label.toLocaleLowerCase("es-MX")}, ${account.rate}`} key={account.id}>
                         <div className="account-name" role="cell"><span className={`account-monogram ${account.group}`}>{account.label.charAt(0).toUpperCase()}</span><div><strong>{account.label}</strong><small>{account.note || "Sin nota"}</small></div></div>
@@ -2336,8 +2366,9 @@ export default function Home() {
             </div>
 
             <aside className="panel assumptions-card">
-              <div className="panel-heading compact"><div><span className="eyebrow">ESCENARIO</span><h2>Supuestos</h2></div></div>
-              <div className="scenario-presets" role="group" aria-label="Escenarios rápidos"><button type="button" aria-pressed={reserveRate === 5 && gbmRate === 7 && inflationRate === 5} onClick={() => applyScenario("conservative")}>Conservador</button><button type="button" aria-pressed={reserveRate === RESERVE_RETURN && gbmRate === GBM_RETURN && inflationRate === DEFAULT_INFLATION} onClick={() => applyScenario("base")}>Base</button><button type="button" aria-pressed={reserveRate === 8 && gbmRate === 11 && inflationRate === 3.5} onClick={() => applyScenario("optimistic")}>Optimista</button></div>
+               <div className="panel-heading compact"><div><span className="eyebrow">ESCENARIO</span><h2>Supuestos</h2></div></div>
+               <div className="scenario-presets" role="group" aria-label="Escenarios rápidos"><button type="button" aria-pressed={reserveRate === 5 && gbmRate === 7 && inflationRate === 5} onClick={() => applyScenario("conservative")}>Conservador</button><button type="button" aria-pressed={reserveRate === RESERVE_RETURN && gbmRate === GBM_RETURN && inflationRate === DEFAULT_INFLATION} onClick={() => applyScenario("base")}>Base</button><button type="button" aria-pressed={reserveRate === 8 && gbmRate === 11 && inflationRate === 3.5} onClick={() => applyScenario("optimistic")}>Optimista</button></div>
+               <div className="scenario-status" role="status" aria-live="polite"><span><i className="status-dot green" /> Escenario activo</span><strong>{scenarioLabel}</strong><small>{scenarioLabel === "Personalizado" ? "Ajustaste al menos un supuesto manualmente." : "Puedes cambiarlo sin alterar tus cuentas ni movimientos."}</small></div>
               <label className="rate-field"><span className="rate-label">Rendimiento de reserva anual <InfoTip text="Supuesto para la reserva y los instrumentos de corto plazo. Es una estimación, no una tasa garantizada." /></span><span className="rate-input"><input aria-label="Rendimiento de reserva anual" type="text" inputMode="decimal" value={reserveRateText} onChange={(event) => setReserveRateText(event.target.value)} onBlur={() => setReserveRateText(String(reserveRate))} /><b>%</b></span></label>
               <label className="rate-field"><span className="rate-label">Rendimiento estimado de inversión en MXN <InfoTip text="Escenario total que combina el rendimiento de VOO en dólares y el efecto del tipo de cambio expresado en pesos." /></span><span className="rate-input"><input aria-label="Rendimiento estimado de inversión en MXN" type="text" inputMode="decimal" value={gbmRateText} onChange={(event) => setGbmRateText(event.target.value)} onBlur={() => setGbmRateText(String(gbmRate))} /><b>%</b></span></label>
               <label className="rate-field inflation-rate-field"><span className="rate-label">Inflación anual <InfoTip text="Se usa para convertir el resultado nominal a poder adquisitivo en pesos de hoy." /></span><span className="rate-input"><input aria-label="Inflación anual estimada" type="text" inputMode="decimal" value={inflationRateText} onChange={(event) => setInflationRateText(event.target.value)} onBlur={() => setInflationRateText(String(inflationRate))} /><b>%</b></span></label>
@@ -2380,8 +2411,9 @@ export default function Home() {
           </ContextRail>
           <div className="backup-summary"><span className="backup-summary-copy"><span className="eyebrow">RESPALDO COMPLETO</span><strong>Guardar o restaurar tus datos</strong><small>Excel verificable para conservarlos o moverlos a otro navegador</small></span><span className="backup-summary-action"><Icon name="download" size={22} /></span></div>
           <div className="backup-body" aria-busy={backupBusy}>
-            <div className="backup-copy"><h2 id="backup-title">Una copia clara de tus finanzas</h2><p>Descarga un Excel con tus cuentas, actividad, agenda y proyecciones. Después puedes importarlo para continuar en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> resumen, cuentas, actividad real, movimientos planeados, escenarios y configuración.</p></div>
-            <ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol>
+             <div className="backup-copy"><h2 id="backup-title">Una copia clara de tus finanzas</h2><p>Descarga un Excel con tus cuentas, actividad, agenda y proyecciones. Después puedes importarlo para continuar en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> resumen, cuentas, actividad real, movimientos planeados, escenarios y configuración.</p></div>
+             <div className="data-safety-summary" aria-label="Estado de conservación de tus datos"><div><i className="status-dot green" /><span><strong>{lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</strong><small>{lastSavedAt ? `Última actualización ${new Date(lastSavedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : "Tus cambios se conservan en este dispositivo"}</small></span></div><span className="data-mode-chip">{modeLabel}</span></div>
+             <ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol>
             <div className="backup-actions"><button type="button" className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando Excel…" : "Descargar Excel"}</button><button type="button" className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar Excel</button></div>
           <input ref={backupInputRef} hidden type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" onChange={importBackup} />
             {importPreview && <section className="import-preview" aria-labelledby="import-preview-title"><div><span className="eyebrow">ARCHIVO VALIDADO</span><h3 id="import-preview-title">{importPreview.fileName}</h3><StatusMessage tone="warning" live="off">La importación reemplazará los datos actuales de este navegador.</StatusMessage><span className="import-preview-status"><i className="status-dot green" /> Listo para revisar y confirmar</span></div><div className="import-preview-grid"><span><b>{importPreview.data.accounts.length}</b> cuentas</span><span><b>{importPreview.data.transactions.length}</b> operaciones</span><span><b>{importPreview.data.events.length}</b> movimientos planeados</span><span><b>{importPreview.data.extras.length}</b> escenarios</span></div><div className="import-preview-actions"><button type="button" className="secondary-button" onClick={() => { setImportPreview(null); setBackupStatus("Importación cancelada. Tus datos actuales no cambiaron."); }}>Cancelar</button><button type="button" className="primary-button" onClick={() => applyImportedBackup(importPreview)}>Importar y reemplazar</button></div></section>}
@@ -2407,8 +2439,7 @@ export default function Home() {
       {toast && <div className={`app-toast ${toast.tone}`} role="status"><span aria-hidden="true">{toast.tone === "success" ? "✓" : "!"}</span><p>{toast.message}</p><button type="button" aria-label="Cerrar notificación" onClick={() => setToast(null)}>×</button></div>}
 
       {confirmationAction && (
-        <div className="modal-backdrop confirmation-backdrop">
-          <section ref={confirmationModalRef} className="confirmation-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-description" tabIndex={-1}>
+        <ModalShell ref={confirmationModalRef} className="confirmation-modal" backdropClassName="confirmation-backdrop" role="alertdialog" labelledBy="confirmation-title" describedBy="confirmation-description">
             <span className={`confirmation-mark ${confirmationAction.kind === "reset-example" ? "warning" : "danger"}`} aria-hidden="true">{confirmationAction.kind === "reset-example" ? "!" : "−"}</span>
             <div className="confirmation-copy">
               <span className="eyebrow">CONFIRMACIÓN</span>
@@ -2421,13 +2452,11 @@ export default function Home() {
               <button type="button" className="secondary-button" ref={closeConfirmationButtonRef} onClick={() => setConfirmationAction(null)}>Conservar datos</button>
               <button type="button" className="danger-button" onClick={confirmPendingAction}>{confirmationAction.kind === "reset-example" ? "Sí, restablecer" : "Sí, eliminar"}</button>
             </div>
-          </section>
-        </div>
+        </ModalShell>
       )}
 
       {transactionEditorOpen && (
-        <div className="modal-backdrop transaction-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setTransactionEditorOpen(false); }}>
-          <section ref={transactionModalRef} className="transaction-modal" role="dialog" aria-modal="true" aria-labelledby="transaction-title" aria-describedby="transaction-description" tabIndex={-1}>
+        <ModalShell ref={transactionModalRef} className="transaction-modal" backdropClassName="transaction-backdrop" labelledBy="transaction-title" describedBy="transaction-description" onBackdropClick={(event) => { if (event.target === event.currentTarget) setTransactionEditorOpen(false); }}>
             <div className="editor-heading transaction-modal-heading">
               <div><span className="eyebrow">{editingTransactionId ? "EDITAR ACTIVIDAD" : "NUEVA ACTIVIDAD"}</span><h2 id="transaction-title">{editingTransactionId ? "Ajusta el movimiento" : "Registra un movimiento"}</h2><p id="transaction-description">El saldo y las visualizaciones se actualizarán al guardar.</p></div>
               <button type="button" className="close-button" ref={closeTransactionButtonRef} onClick={() => setTransactionEditorOpen(false)} aria-label="Cerrar movimiento">×</button>
@@ -2484,13 +2513,11 @@ export default function Home() {
               <small>{transactionDraft.kind === "transfer" ? "No cambia tu flujo neto" : transactionDraft.kind === "income" ? "Se suma a tus ingresos" : "Se suma a tus gastos"}</small>
             </div>
             <div className="editor-actions transaction-actions"><button type="button" className="secondary-button" onClick={() => setTransactionEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveTransaction}>{editingTransactionId ? "Guardar cambios" : "Registrar movimiento"}</button></div>
-          </section>
-        </div>
+        </ModalShell>
       )}
 
       {editing && (
-        <div className="modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
-          <section ref={editorModalRef} className="editor-modal" role="dialog" aria-modal="true" aria-labelledby="editor-title" aria-describedby="editor-description" tabIndex={-1}>
+        <ModalShell ref={editorModalRef} className="editor-modal" labelledBy="editor-title" describedBy="editor-description" onBackdropClick={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
             <div className="editor-heading"><div><span className="eyebrow">DATOS BASE</span><h2 id="editor-title">Administrar cuentas y saldos</h2><p id="editor-description">Edita nombres, montos, rendimientos y notas. También puedes agregar o eliminar cuentas.</p></div><button type="button" className="close-button" ref={closeEditorButtonRef} onClick={() => setEditing(false)} aria-label="Cerrar editor">×</button></div>
             <div className="editor-toolbar"><span>{draftAccounts.length} cuentas</span><div>{removedDraftAccount && <button type="button" className="undo-account" onClick={undoDraftAccountRemoval}>Deshacer eliminación</button>}<button type="button" className="secondary-button" onClick={addDraftAccount}>+ Agregar cuenta</button></div></div>
             {accountEditorNotice && <p className="editor-notice" role="status">{accountEditorNotice}</p>}
@@ -2508,8 +2535,7 @@ export default function Home() {
               </article> : <div className="empty-account-detail"><strong>No hay cuentas</strong><p>Agrega una cuenta para empezar.</p></div>}
             </div>
             <div className="editor-actions sticky-actions"><span>Revisa una cuenta a la vez. Los cambios se guardan juntos.</span><div><button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveAccounts}>Guardar cambios</button></div></div>
-          </section>
-        </div>
+        </ModalShell>
       )}
     </main>
   );

@@ -83,6 +83,9 @@ test("includes the extended planning controls", async () => {
   const nextBestActionSource = await readFile(new URL("../app/components/ui/NextBestAction.tsx", import.meta.url), "utf8");
   const filterChipsSource = await readFile(new URL("../app/components/ui/FilterChips.tsx", import.meta.url), "utf8");
   const statusMessageSource = await readFile(new URL("../app/components/ui/StatusMessage.tsx", import.meta.url), "utf8");
+  const actionMenuSource = await readFile(new URL("../app/components/ui/ActionMenu.tsx", import.meta.url), "utf8");
+  const emptyStateSource = await readFile(new URL("../app/components/ui/EmptyState.tsx", import.meta.url), "utf8");
+  const modalShellSource = await readFile(new URL("../app/components/ui/ModalShell.tsx", import.meta.url), "utf8");
 
   assert.match(source, /const MAX_YEARS = 30/);
   assert.match(source, /Mes de inicio/);
@@ -151,6 +154,9 @@ test("includes the extended planning controls", async () => {
   assert.match(nextBestActionSource, /Siguiente mejor acción/);
   assert.match(filterChipsSource, /Filtros activos/);
   assert.match(statusMessageSource, /status-message/);
+  assert.match(actionMenuSource, /aria-haspopup="menu"/);
+  assert.match(emptyStateSource, /empty-state-actions/);
+  assert.match(modalShellSource, /aria-modal="true"/);
   assert.match(source, /className="form-stepper"/);
   assert.match(source, /transactionStep/);
   assert.match(source, /Vista previa del registro/);
@@ -162,6 +168,10 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /Importar y reemplazar/);
   assert.match(source, /aria-valuetext=\{chartValueText\}/);
   assert.match(source, /activityFiltersActive/);
+  assert.match(source, /activityFiltersOpen/);
+  assert.match(source, /useDeferredValue/);
+  assert.match(source, /scenarioLabel/);
+  assert.match(source, /data-safety-summary/);
   assert.match(source, /aria-label="Monto del movimiento en pesos mexicanos"/);
   assert.match(source, /transactionTriggerRef\.current\?\.isConnected/);
   assert.match(source, /formatDurationMonths\(goalMonth\)/);

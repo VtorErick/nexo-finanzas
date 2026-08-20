@@ -62,6 +62,21 @@ test.describe("Nexo UI flows", () => {
     await expect(page.locator(".filter-chip")).toHaveCount(0);
   });
 
+  test("keeps secondary activity filters out of the way on mobile", async ({ page }) => {
+    test.skip(test.info().project.name !== "mobile-chromium", "Este comportamiento solo aplica al layout móvil.");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?view=activity");
+
+    const filterPanel = page.locator("#activity-filter-panel");
+    const filterToggle = page.getByRole("button", { name: /Filtros/ }).last();
+    await expect(filterPanel).not.toBeVisible();
+    await filterToggle.click();
+    await expect(filterPanel).toBeVisible();
+    await expect(page.getByLabel("Filtrar por categoría")).toBeVisible();
+    await filterToggle.click();
+    await expect(filterPanel).not.toBeVisible();
+  });
+
   test("keeps five clear destinations in the mobile navigation", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();

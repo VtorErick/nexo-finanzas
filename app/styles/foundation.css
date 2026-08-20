@@ -1003,3 +1003,230 @@ summary:focus-visible {
     border-top: 1px solid var(--line);
   }
 }
+
+/* ============================================================
+   Interaction polish · menus, filters and confidence states
+   ============================================================ */
+
+.action-menu {
+  position: relative;
+}
+
+.action-menu-trigger {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink-soft);
+  display: inline-flex;
+  font-size: 18px;
+  font-weight: 850;
+  height: 40px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 40px;
+}
+
+.action-menu-trigger:hover,
+.action-menu-trigger[aria-expanded="true"] {
+  background: var(--surface-accent);
+  border-color: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.action-menu-items {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  gap: 3px;
+  min-width: 174px;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 25;
+}
+
+.action-menu-items button {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: var(--ink-soft) !important;
+  display: flex;
+  gap: 7px;
+  justify-content: flex-start;
+  min-height: 40px !important;
+  padding: 9px 11px !important;
+  text-align: left;
+  width: 100%;
+}
+
+.action-menu-items button:hover,
+.action-menu-items button:focus-visible {
+  background: var(--surface-soft) !important;
+  color: var(--ink) !important;
+}
+
+.action-menu-items button.danger-link {
+  color: var(--red) !important;
+}
+
+.filter-toggle {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink-soft);
+  display: none;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 7px;
+  min-height: 38px;
+  padding: 6px 11px;
+}
+
+.filter-toggle span:last-child {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  margin-left: auto;
+}
+
+.scenario-status {
+  background: var(--surface-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+  display: grid;
+  gap: 3px;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.scenario-status > span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 10.5px;
+  font-weight: 750;
+  gap: 7px;
+  text-transform: uppercase;
+}
+
+.scenario-status > span .status-dot {
+  height: 7px;
+  width: 7px;
+}
+
+.scenario-status strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.scenario-status small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.data-safety-summary {
+  align-items: center;
+  background: var(--surface-accent);
+  border: 1px solid var(--accent-soft);
+  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 11px 13px;
+}
+
+.data-safety-summary > div {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+}
+
+.data-safety-summary .status-dot {
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.data-safety-summary span:not(.status-dot) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.data-safety-summary strong {
+  color: var(--accent-strong);
+  font-size: 11.5px;
+}
+
+.data-safety-summary small {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.data-mode-chip {
+  background: var(--surface);
+  border: 1px solid var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.activity-month-group,
+.account-group,
+.extra-saved-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 180px;
+}
+
+.recent-panel > .empty-state {
+  border-top: 1px solid var(--line-soft);
+}
+
+@media (max-width: 699px) {
+  .filter-toggle {
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .activity-filter-controls[data-open="false"] {
+    display: none;
+  }
+
+  .activity-filter-controls[data-open="true"] {
+    display: grid;
+  }
+
+  .data-safety-summary {
+    align-items: flex-start;
+    display: grid;
+  }
+
+  .data-mode-chip {
+    justify-self: start;
+  }
+
+  .action-menu-items {
+    min-width: 166px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-menu-items,
+  .filter-toggle {
+    transition: none;
+  }
+}
