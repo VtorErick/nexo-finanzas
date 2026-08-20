@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import "./globals.css";
+import "./styles/foundation.css";
 
 const title = "Nexo · Tu dinero, en perspectiva";
 const description = "Cuentas, actividad, metas y proyecciones en una experiencia financiera clara, privada y fácil de usar.";

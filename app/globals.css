@@ -235,7 +235,7 @@ a { color: inherit; }
 .brand-text { display: grid; font-size: 19px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.05; }
 .brand-text small { color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: 0.3px; margin-top: 3px; }
 .side-nav { display: grid; gap: 3px; }
-.side-nav a {
+.side-nav button {
   align-items: center;
   border-radius: 12px;
   color: var(--muted);
@@ -248,8 +248,8 @@ a { color: inherit; }
   text-decoration: none;
   transition: background 150ms ease, color 150ms ease;
 }
-.side-nav a:hover { background: var(--surface-soft); color: var(--ink); }
-.side-nav a.active { background: var(--surface-accent); color: var(--accent-strong); font-weight: 700; }
+.side-nav button:hover { background: var(--surface-soft); color: var(--ink); }
+.side-nav button.active { background: var(--surface-accent); color: var(--accent-strong); font-weight: 700; }
 .sidebar-foot { border-top: 1px solid var(--line-soft); display: grid; gap: 10px; margin-top: auto; padding-top: 16px; }
 .sidebar-foot-row { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
 .sidebar-foot .primary-button { width: 100%; }
@@ -799,7 +799,7 @@ html:not([data-theme="dark"]) .undo-banner button:first-of-type { color: #c4b5fd
     right: 0;
     z-index: 45;
   }
-  .tab-bar a {
+  .tab-bar button {
     align-items: center;
     border-radius: 12px;
     color: var(--muted);
@@ -814,8 +814,8 @@ html:not([data-theme="dark"]) .undo-banner button:first-of-type { color: #c4b5fd
     position: relative;
     text-decoration: none;
   }
-  .tab-bar a.active { color: var(--accent-strong); font-weight: 750; }
-  .tab-bar a.active::before { background: var(--accent); border-radius: 99px; content: ""; height: 3px; position: absolute; top: 0; width: 26px; }
+  .tab-bar button.active { color: var(--accent-strong); font-weight: 750; }
+  .tab-bar button.active::before { background: var(--accent); border-radius: 99px; content: ""; height: 3px; position: absolute; top: 0; width: 26px; }
 
   .overview-grid { grid-template-columns: 1fr 1fr; }
   .net-worth-card { grid-column: 1 / -1; min-height: 178px; }
@@ -991,16 +991,16 @@ body {
 .brand-text { font-size: 18px; letter-spacing: -0.65px; }
 .brand-text small { font-size: 10px; letter-spacing: 0.1px; }
 .side-nav { gap: 4px; }
-.side-nav a {
+.side-nav button {
   border-radius: 10px;
   font-size: 13.5px;
   min-height: 44px;
   padding: 9px 12px;
 }
-.side-nav a.active { background: var(--ink); color: var(--bg); }
-.side-nav a.active .icon { stroke-width: 2.1; }
-.side-nav a:hover { background: var(--surface-elevated); }
-.side-nav a.active:hover { background: var(--ink); color: var(--bg); }
+.side-nav button.active { background: var(--ink); color: var(--bg); }
+.side-nav button.active .icon { stroke-width: 2.1; }
+.side-nav button:hover { background: var(--surface-elevated); }
+.side-nav button.active:hover { background: var(--ink); color: var(--bg); }
 .sidebar-foot { gap: 9px; }
 
 .primary-button, .secondary-button, .danger-button, .backup-button {
@@ -1123,7 +1123,7 @@ body {
 .account-selector button:hover, .account-selector button.active { box-shadow: none; }
 .account-input { padding: 17px; }
 
-html[data-theme="dark"] .side-nav a.active { background: var(--ink); color: var(--bg); }
+html[data-theme="dark"] .side-nav button.active { background: var(--ink); color: var(--bg); }
 html[data-theme="dark"] .switch > span::after { background: var(--bg); }
 html[data-theme="dark"] .event-blue,
 html[data-theme="dark"] .event-green,
@@ -2456,3 +2456,40 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
   .category-editor-field { grid-column: auto; }
 }
 
+/* ============================================================
+   Movimientos planeados y resumen sin duplicados
+   ============================================================ */
+
+.overview-insight-grid .cashflow-panel { min-height: 0; }
+.overview-flow-link { align-items: center; border-top: 1px solid var(--line-soft); display: flex; gap: 12px; justify-content: space-between; margin: 16px 24px 0; padding: 13px 0 16px; }
+.overview-flow-link > span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.overview-flow-link .text-button { flex: 0 0 auto; }
+.activity-heading-actions { gap: 7px; }
+.planned-movements-panel { margin-top: 18px; overflow: hidden; }
+.planned-movements-toggle { align-items: center; background: var(--surface); border: 0; color: inherit; cursor: pointer; display: flex; gap: 16px; justify-content: space-between; min-height: 76px; padding: 12px 20px; text-align: left; width: 100%; }
+.planned-movements-toggle:hover { background: var(--surface-soft); }
+.planned-movements-copy { display: grid; gap: 3px; min-width: 0; }
+.planned-movements-copy .eyebrow { margin: 0; }
+.planned-movements-copy strong { font-size: 16px; }
+.planned-movements-copy small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planned-movements-mark { align-items: center; background: var(--surface-elevated); border-radius: 50%; color: var(--ink-soft); display: inline-flex; flex: 0 0 auto; font-size: 20px; height: 32px; justify-content: center; line-height: 1; width: 32px; }
+.planned-movements-body { border-top: 1px solid var(--line-soft); display: grid; gap: 14px; padding: 16px 20px 20px; }
+.planned-movements-intro { align-items: center; display: flex; gap: 16px; justify-content: space-between; }
+.planned-movements-intro p { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 0; max-width: 700px; }
+.planned-movements-intro .primary-button, .planned-movements-intro .secondary-button { flex: 0 0 auto; }
+.planned-movements-body .event-form { margin: 0; }
+.planned-movements-body .agenda-grid { margin: 0; }
+
+@media (max-width: 699px) {
+  .overview-flow-link { align-items: stretch; display: grid; gap: 7px; margin-left: 18px; margin-right: 18px; }
+  .overview-flow-link .text-button { justify-self: start; }
+  .activity-heading-actions { display: grid; gap: 7px; grid-template-columns: 1fr 1fr; }
+  .activity-heading-actions .currency-pill { grid-column: 1 / -1; justify-self: start; }
+  .activity-heading-actions button { width: 100%; }
+  .planned-movements-toggle { min-height: 68px; padding-left: 16px; padding-right: 16px; }
+  .planned-movements-copy strong { font-size: 14px; }
+  .planned-movements-copy small { font-size: 11px; }
+  .planned-movements-body { padding: 14px 16px 16px; }
+  .planned-movements-intro { align-items: stretch; display: grid; gap: 10px; }
+  .planned-movements-intro button { width: 100%; }
+}

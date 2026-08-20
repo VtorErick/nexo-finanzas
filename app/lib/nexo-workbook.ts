@@ -397,7 +397,7 @@ function addTransactionsSheet(workbook: import("exceljs").Workbook, data: Workbo
 function addEventsSheet(workbook: import("exceljs").Workbook, data: WorkbookBackup) {
   const sheet = workbook.addWorksheet("Movimientos");
   configureSheet(sheet, 5);
-  addSheetTitle(sheet, "Agenda de movimientos", "Incluye movimientos únicos y recurrentes, su impacto en la proyección y su historial de ocurrencias.", "M");
+  addSheetTitle(sheet, "Movimientos planeados", "Incluye movimientos únicos y recurrentes, su impacto en la proyección y su historial de ocurrencias.", "M");
   const headers = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
   const rows = data.events.map((event) => [event.id, parseIsoDate(event.date), event.title, kindLabel(event.kind), event.numericAmount, event.detail || null, recurrenceLabel(event.recurrence), event.recurrenceEnd ? parseIsoDate(event.recurrenceEnd) : null, destinationLabel(event.destination), event.includeInProjection ? "Sí" : "No", event.tone, event.completedDates.join(", ") || null, event.skippedDates.join(", ") || null]);
   writeDataGrid(sheet, headers, rows, [null, null, null, null, 0, null, "Una vez", null, "No incluir", "No", "blue", null, null]);

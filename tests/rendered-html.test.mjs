@@ -55,14 +55,12 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /aria-label="Ingresos y gastos de los últimos seis meses"/);
   assert.match(html, /aria-label="Filtrar actividad"/);
   assert.match(html, /aria-label="Horizonte de proyección"/);
-  assert.match(html, /aria-label="Mes anterior"/);
-  assert.match(html, /aria-label="Mes siguiente"/);
   assert.match(html, /aria-label="Inflación anual estimada"/);
   assert.match(html, /aria-label="Meta del fondo de emergencia"/);
   assert.match(html, /aria-label="Cambiar a tema oscuro"/);
   assert.match(html, /no es un ingreso/);
   assert.match(html, /Cobertura actual/);
-  assert.match(html, /Agregar movimiento/);
+  assert.match(html, /Planear movimiento/);
   assert.match(html, /Abrir respaldo/);
   assert.match(html, /Ajustar meta de reserva/);
   assert.match(html, /Guardar o restaurar tus datos/);
@@ -72,10 +70,19 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /RUTA RÁPIDA/);
   assert.match(html, /Movimientos por mes/);
   assert.match(html, /Filtrar por categoría/);
+  assert.match(html, /aria-label="Buscar concepto o categoría"/);
+  assert.match(html, /role="slider" aria-label="Explorar periodos de la proyección"/);
+  assert.match(html, /Neto estimado al final, en pesos de hoy/);
 });
 
 test("includes the extended planning controls", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const contextRailSource = await readFile(new URL("../app/components/ui/ContextRail.tsx", import.meta.url), "utf8");
+  const viewHeaderSource = await readFile(new URL("../app/components/ui/ViewHeader.tsx", import.meta.url), "utf8");
+  const metricCardSource = await readFile(new URL("../app/components/ui/MetricCard.tsx", import.meta.url), "utf8");
+  const nextBestActionSource = await readFile(new URL("../app/components/ui/NextBestAction.tsx", import.meta.url), "utf8");
+  const filterChipsSource = await readFile(new URL("../app/components/ui/FilterChips.tsx", import.meta.url), "utf8");
+  const statusMessageSource = await readFile(new URL("../app/components/ui/StatusMessage.tsx", import.meta.url), "utf8");
 
   assert.match(source, /const MAX_YEARS = 30/);
   assert.match(source, /Mes de inicio/);
@@ -134,12 +141,38 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /Try the next preserved Nexo snapshot/);
   assert.doesNotMatch(source, /filter\(\(key\) => key !== STORAGE_KEY\)\s*\.forEach\(\(key\) => window\.localStorage\.removeItem/);
   assert.match(source, /function trapFocusInModal\(/);
+  assert.match(source, /function viewFromLocation\(/);
+  assert.match(source, /syncViewFromLocation\(\);/);
+  assert.match(source, /window\.history\[method\]/);
+  assert.match(source, /<ViewHeader/);
+  assert.match(contextRailSource, /className="context-rail"/);
+  assert.match(viewHeaderSource, /view-header/);
+  assert.match(metricCardSource, /metric-card/);
+  assert.match(nextBestActionSource, /Siguiente mejor acción/);
+  assert.match(filterChipsSource, /Filtros activos/);
+  assert.match(statusMessageSource, /status-message/);
+  assert.match(source, /className="form-stepper"/);
+  assert.match(source, /transactionStep/);
+  assert.match(source, /Vista previa del registro/);
+  assert.match(source, /projection-interpretation/);
+  assert.match(source, /account-group-heading/);
+  assert.match(source, /Estado del respaldo/);
+  assert.match(source, /const STORAGE_SCHEMA_VERSION = 1/);
+  assert.match(source, /setImportPreview\(/);
+  assert.match(source, /Importar y reemplazar/);
+  assert.match(source, /aria-valuetext=\{chartValueText\}/);
+  assert.match(source, /activityFiltersActive/);
+  assert.match(source, /aria-label="Monto del movimiento en pesos mexicanos"/);
   assert.match(source, /transactionTriggerRef\.current\?\.isConnected/);
   assert.match(source, /formatDurationMonths\(goalMonth\)/);
   assert.match(source, /const coverageMonths = monthlyExpenses > 0/);
   assert.match(source, /Ruta rápida para usar Plan/);
   assert.match(source, /Define el horizonte/);
   assert.match(source, /Nueva categoría/);
+  assert.match(source, /aria-label="Mes anterior"/);
+  assert.match(source, /aria-label="Mes siguiente"/);
+  assert.match(source, /Movimientos próximos y recurrentes/);
+  assert.doesNotMatch(source, /aria-label="Vista del plan"/);
   assert.match(source, /Cómo se forma la proyección/);
   assert.match(source, /disponibles no se proyectan/);
   assert.doesNotMatch(source, /SIGUIENTE ACCIÓN/);
@@ -149,6 +182,7 @@ test("includes the extended planning controls", async () => {
 
 test("defines accessible light and dark themes with distinguishable chart series", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const foundation = await readFile(new URL("../app/styles/foundation.css", import.meta.url), "utf8");
 
   assert.match(css, /html\[data-theme="dark"\]/);
   assert.match(css, /--bg: #f7f7fa/);
@@ -165,6 +199,12 @@ test("defines accessible light and dark themes with distinguishable chart series
   assert.match(css, /\.confirmation-modal/);
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
   assert.match(css, /\.assumptions-result \{ background: var\(--brand-surface\); color: #ffffff;/);
+  assert.match(foundation, /--control-height: 46px/);
+  assert.match(foundation, /\.tab-bar button:focus-visible/);
+  assert.match(foundation, /\.import-preview-grid/);
+  assert.match(foundation, /\.context-rail/);
+  assert.match(foundation, /\.mobile-view-label/);
+  assert.match(foundation, /\.form-stepper/);
 });
 
 test("defines a privacy-safe static build for Vercel", async () => {
