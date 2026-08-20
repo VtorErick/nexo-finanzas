@@ -27,12 +27,15 @@ export type WorkbookEvent = {
   numericAmount: number;
   tone: "blue" | "green" | "orange" | "red";
   kind: "expense" | "income" | "transfer" | "contribution";
+  accountId: string;
+  toAccountId: string | null;
   destination: "none" | "cetes" | "gbm";
   includeInProjection: boolean;
   recurrence: "none" | "weekly" | "monthly" | "annual";
   recurrenceEnd: string | null;
   completedDates: string[];
   skippedDates: string[];
+  appliedTransactionIds: Record<string, string>;
 };
 
 export type WorkbookExtra = {
@@ -398,10 +401,10 @@ function addEventsSheet(workbook: import("exceljs").Workbook, data: WorkbookBack
   const sheet = workbook.addWorksheet("Movimientos");
   configureSheet(sheet, 5);
   addSheetTitle(sheet, "Movimientos planeados", "Incluye movimientos únicos y recurrentes, su impacto en la proyección y su historial de ocurrencias.", "M");
-  const headers = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
-  const rows = data.events.map((event) => [event.id, parseIsoDate(event.date), event.title, kindLabel(event.kind), event.numericAmount, event.detail || null, recurrenceLabel(event.recurrence), event.recurrenceEnd ? parseIsoDate(event.recurrenceEnd) : null, destinationLabel(event.destination), event.includeInProjection ? "Sí" : "No", event.tone, event.completedDates.join(", ") || null, event.skippedDates.join(", ") || null]);
-  writeDataGrid(sheet, headers, rows, [null, null, null, null, 0, null, "Una vez", null, "No incluir", "No", "blue", null, null]);
-  sheet.columns = [{ width: 10 }, { width: 17 }, { width: 32 }, { width: 17 }, { width: 19 }, { width: 40 }, { width: 17 }, { width: 17 }, { width: 22 }, { width: 17 }, { width: 13 }, { width: 28 }, { width: 28 }];
+  const headers = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos", "Cuenta origen", "Cuenta destino real", "Aplicados"];
+  const rows = data.events.map((event) => [event.id, parseIsoDate(event.date), event.title, kindLabel(event.kind), event.numericAmount, event.detail || null, recurrenceLabel(event.recurrence), event.recurrenceEnd ? parseIsoDate(event.recurrenceEnd) : null, destinationLabel(event.destination), event.includeInProjection ? "Sí" : "No", event.tone, event.completedDates.join(", ") || null, event.skippedDates.join(", ") || null, event.accountId || null, event.toAccountId || null, Object.entries(event.appliedTransactionIds ?? {}).map(([date, id]) => `${date}:${id}`).join(", ") || null]);
+  writeDataGrid(sheet, headers, rows, [null, null, null, null, 0, null, "Una vez", null, "No incluir", "No", "blue", null, null, null, null, null]);
+  sheet.columns = [{ width: 10 }, { width: 17 }, { width: 32 }, { width: 17 }, { width: 19 }, { width: 40 }, { width: 17 }, { width: 17 }, { width: 22 }, { width: 17 }, { width: 13 }, { width: 28 }, { width: 28 }, { width: 22 }, { width: 22 }, { width: 40 }];
   styleTableSheet(sheet, [5], [2, 8]);
   [10, 11].forEach((column) => { sheet.getColumn(column).alignment = { horizontal: "center" }; });
 }
@@ -596,7 +599,11 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
   if (transactions.some((transaction) => !isIsoDate(transaction.date) || transaction.amount <= 0 || !accountIds.has(transaction.accountId))) throw new Error("El historial contiene fechas, montos o cuentas inválidas");
   if (transactions.some((transaction) => transaction.kind === "transfer" && (!transaction.toAccountId || transaction.toAccountId === transaction.accountId || !accountIds.has(transaction.toAccountId)))) throw new Error("El historial contiene una transferencia inválida");
 
-  const eventHeaders = ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
+  const eventHeaderRow = Array.from({ length: 10 }, (_, index) => index + 1).find((rowNumber) => textValue(eventsSheet.getCell(rowNumber, 1).value) === "ID");
+  const hasAccountColumns = eventHeaderRow ? textValue(eventsSheet.getCell(eventHeaderRow, 14).value) === "Cuenta origen" : false;
+  const eventHeaders = hasAccountColumns
+    ? ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos", "Cuenta origen", "Cuenta destino real", "Aplicados"]
+    : ["ID", "Primera fecha", "Movimiento", "Tipo", "Monto (MXN)", "Nota", "Repetición", "Fecha final", "Destino", "En proyección", "Color", "Completados", "Omitidos"];
   const events = tableRows(eventsSheet, eventHeaders).map((row) => {
     const numericAmount = sanitizeMoney(numberValue(row[4]));
     const destination = destinationValue(excelValue(row[8]));
@@ -611,11 +618,16 @@ export async function importNexoWorkbook(file: File): Promise<WorkbookBackup> {
       detail: textValue(row[5]),
       recurrence: recurrenceValue(excelValue(row[6])),
       recurrenceEnd: dateValue(row[7]) || null,
+      accountId: hasAccountColumns ? textValue(row[13]) : "",
+      toAccountId: hasAccountColumns ? textValue(row[14]) || null : null,
       destination,
       includeInProjection: booleanValue(row[9]) && destination !== "none",
       tone: (["blue", "green", "orange", "red"].includes(tone) ? tone : "blue") as WorkbookEvent["tone"],
       completedDates: textValue(row[11]).split(",").map((value) => value.trim()).filter(Boolean),
       skippedDates: textValue(row[12]).split(",").map((value) => value.trim()).filter(Boolean),
+      appliedTransactionIds: hasAccountColumns
+        ? Object.fromEntries(textValue(row[15]).split(",").map((value) => value.trim().split(":")).filter(([date, id]) => isIsoDate(date) && Boolean(id)))
+        : {},
     };
   });
   const eventIds = new Set(events.map((event) => event.id));

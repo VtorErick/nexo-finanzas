@@ -69,6 +69,8 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /UDI de referencia/);
   assert.match(html, /RUTA RÁPIDA/);
   assert.match(html, /Movimientos por mes/);
+  assert.match(html, /aria-label="Mes en vista"/);
+  assert.match(html, /Aplicar/);
   assert.match(html, /Filtrar por categoría/);
   assert.match(html, /aria-label="Buscar concepto o categoría"/);
   assert.match(html, /role="slider" aria-label="Explorar periodos de la proyección"/);
@@ -177,6 +179,11 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /aria-valuetext=\{chartValueText\}/);
   assert.match(source, /activityFiltersActive/);
   assert.match(source, /activityFiltersOpen/);
+  assert.match(source, /const \[activityMonth, setActivityMonth\]/);
+  assert.match(source, /const activityMonthOptions = useMemo/);
+  assert.match(source, /setActivityMonth\(event\.date\.slice\(0, 7\)\)/);
+  assert.match(source, /Movimiento aplicado: apareció en Actividad y actualizó tus cuentas/);
+  assert.match(source, /appliedTransactionIds/);
   assert.match(source, /useDeferredValue/);
   assert.match(source, /scenarioLabel/);
   assert.match(source, /data-safety-summary/);
@@ -214,6 +221,9 @@ test("defines accessible light and dark themes with distinguishable chart series
   assert.match(css, /Nexo · Product system 2026/);
   assert.match(css, /\.overview-insight-grid/);
   assert.match(css, /\.transaction-modal/);
+  assert.match(css, /\.activity-month-selector/);
+  assert.match(css, /\.metric-card-value/);
+  assert.match(css, /overflow-wrap: anywhere/);
   assert.match(css, /\.confirmation-modal/);
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
   assert.match(css, /\.assumptions-result \{ background: var\(--brand-surface\); color: #ffffff;/);
@@ -331,7 +341,7 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
       emergencyIds: ["a1"], years: 15, target: 180000, monthlyExpenses: 30000,
       reserveRate: 6.5, investmentRate: 9, inflationRate: 4, brokerFee: 0.25, capitalGainsTax: 10,
       extras: [{ id: 1, enabled: true, amount: 2500, recurring: true, frequency: "monthly", destination: "gbm", startMonth: 1, endMonth: null, monthOfYear: 1, oneTimeMonth: 1 }],
-      events: [{ id: 1, date: "2026-08-15", title: "Movimiento de prueba", amount: "$3,000", detail: "Dato ficticio", numericAmount: 3000, tone: "green", kind: "contribution", destination: "gbm", includeInProjection: true, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [] }],
+      events: [{ id: 1, date: "2026-08-15", title: "Movimiento de prueba", amount: "$3,000", detail: "Dato ficticio", numericAmount: 3000, tone: "green", kind: "contribution", accountId: "a1", toAccountId: "a2", destination: "gbm", includeInProjection: true, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [], appliedTransactionIds: {} }],
       transactions: [{ id: "tx-1", date: "2026-08-13", title: "Nómina de prueba", amount: 18000, kind: "income", accountId: "a1", toAccountId: null, category: "Trabajo", note: "Dato ficticio" }],
       categories: [{ id: "trabajo", label: "Trabajo", icon: "work" }],
     };
@@ -348,7 +358,7 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
     assert.doesNotMatch(styles, /rgb="(?:0000FF|0F625A)"/);
     assert.match(await archive.file("xl/worksheets/sheet2.xml").async("string"), /<autoFilter ref="A5:G7"\/>/);
     assert.match(await archive.file("xl/worksheets/sheet3.xml").async("string"), /<autoFilter ref="A5:I6"\/>/);
-    assert.match(await archive.file("xl/worksheets/sheet4.xml").async("string"), /<autoFilter ref="A5:M6"\/>/);
+    assert.match(await archive.file("xl/worksheets/sheet4.xml").async("string"), /<autoFilter ref="A5:P6"\/>/);
     assert.match(await archive.file("xl/worksheets/sheet5.xml").async("string"), /<autoFilter ref="A5:J6"\/>/);
     const drawing = await archive.file("xl/drawings/drawing1.xml").async("string");
     assert.doesNotMatch(drawing, /<a:ext cx="0" cy="0"\/>/);
@@ -364,6 +374,8 @@ test("exports an Excel-compatible workbook and reimports all data", async () => 
     assert.equal(imported.categories[0].label, "Trabajo");
     assert.equal(imported.transactions[0].title, "Nómina de prueba");
     assert.equal(imported.accounts[0].label, "Cuenta de prueba");
+    assert.equal(imported.events[0].accountId, "a1");
+    assert.equal(imported.events[0].toAccountId, "a2");
 
     const { default: ExcelJS } = await import("exceljs");
     const tamperedWorkbook = new ExcelJS.Workbook();

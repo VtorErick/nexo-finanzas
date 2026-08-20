@@ -1565,3 +1565,18 @@ summary:focus-visible {
     transition: none;
   }
 }
+
+/* No visible copy should disappear behind an ellipsis or leave its container. */
+.tab-bar button,
+.mobile-topbar .brand-text,
+.view-header-end > .private-pill,
+.view-header-end > .currency-pill,
+.private-hero-mark,
+.account-group-heading b,
+.context-rail .text-button {
+  max-width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}

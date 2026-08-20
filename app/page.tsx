@@ -134,12 +134,15 @@ type CalendarEvent = {
   numericAmount: number;
   tone: EventTone;
   kind: MovementKind;
+  accountId: string;
+  toAccountId: string | null;
   destination: ProjectionDestination;
   includeInProjection: boolean;
   recurrence: EventRecurrence;
   recurrenceEnd: string | null;
   completedDates: string[];
   skippedDates: string[];
+  appliedTransactionIds: Record<string, string>;
 };
 type CalendarOccurrence = CalendarEvent & { sourceId: number; occurrenceKey: string };
 type ExtraIncome = {
@@ -219,6 +222,16 @@ function formatMonthGroupLabel(monthKey: string) {
   return new Date(year, month - 1, 1, 12).toLocaleDateString("es-MX", { month: "long", year: "numeric" }).toLocaleUpperCase("es-MX");
 }
 
+function monthKeyFromDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function shiftMonthKey(monthKey: string, offset: number) {
+  const date = parseIsoDate(`${monthKey}-01`);
+  date.setMonth(date.getMonth() + offset);
+  return monthKeyFromDate(date);
+}
+
 function formatDurationMonths(months: number | null) {
   if (!months) return "Meta fuera del horizonte";
   const years = Math.floor(months / 12);
@@ -277,9 +290,9 @@ function createExampleExtras(today: Date): ExtraIncome[] {
 
 function createExampleEvents(today: Date): CalendarEvent[] {
   return [
-    { id: 1, date: dateAfter(today, 3), title: "Aportación mensual", amount: "$3,000", detail: "Ejemplo para inversión", numericAmount: 3000, tone: "green", kind: "contribution", destination: "gbm", includeInProjection: true, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [] },
-    { id: 2, date: dateAfter(today, 7), title: "Pago de servicios", amount: "$2,200", detail: "Movimiento recurrente de ejemplo", numericAmount: 2200, tone: "red", kind: "expense", destination: "none", includeInProjection: false, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [] },
-    { id: 3, date: dateAfter(today, 15), title: "Ingreso de ejemplo", amount: "$6,000", detail: "Ingreso extraordinario ficticio", numericAmount: 6000, tone: "blue", kind: "income", destination: "cetes", includeInProjection: true, recurrence: "none", recurrenceEnd: null, completedDates: [], skippedDates: [] },
+    { id: 1, date: dateAfter(today, 3), title: "Aportación mensual", amount: "$3,000", detail: "Ejemplo para inversión", numericAmount: 3000, tone: "green", kind: "contribution", accountId: "demo-daily", toAccountId: "demo-index", destination: "gbm", includeInProjection: true, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [], appliedTransactionIds: {} },
+    { id: 2, date: dateAfter(today, 7), title: "Pago de servicios", amount: "$2,200", detail: "Movimiento recurrente de ejemplo", numericAmount: 2200, tone: "red", kind: "expense", accountId: "demo-daily", toAccountId: null, destination: "none", includeInProjection: false, recurrence: "monthly", recurrenceEnd: null, completedDates: [], skippedDates: [], appliedTransactionIds: {} },
+    { id: 3, date: dateAfter(today, 15), title: "Ingreso de ejemplo", amount: "$6,000", detail: "Ingreso extraordinario ficticio", numericAmount: 6000, tone: "blue", kind: "income", accountId: "demo-daily", toAccountId: null, destination: "cetes", includeInProjection: true, recurrence: "none", recurrenceEnd: null, completedDates: [], skippedDates: [], appliedTransactionIds: {} },
   ];
 }
 
@@ -308,6 +321,7 @@ function normalizeEvent(event: Partial<CalendarEvent>, fallbackId = 1): Calendar
   const recurrenceEnd = isValidIsoDate(event.recurrenceEnd) && event.recurrenceEnd >= date ? event.recurrenceEnd : null;
   const tone: EventTone = event.tone === "green" || event.tone === "orange" || event.tone === "red" ? event.tone : "blue";
   const kind: MovementKind = event.kind === "expense" || event.kind === "income" || event.kind === "contribution" ? event.kind : "transfer";
+  const appliedTransactionIds = Object.fromEntries(Object.entries(event.appliedTransactionIds ?? {}).filter(([date, id]) => isValidIsoDate(date) && typeof id === "string" && id.trim().length > 0));
   const destination: ProjectionDestination = event.destination === "cetes" || event.destination === "gbm" ? event.destination : "none";
   return {
     id: Math.max(1, Math.trunc(clampFiniteNumber(event.id, 1, Number.MAX_SAFE_INTEGER, fallbackId))),
@@ -318,12 +332,15 @@ function normalizeEvent(event: Partial<CalendarEvent>, fallbackId = 1): Calendar
     numericAmount,
     tone,
     kind,
+    accountId: safeText(event.accountId),
+    toAccountId: safeText(event.toAccountId) || null,
     destination,
     includeInProjection: event.includeInProjection === true && destination !== "none",
     recurrence,
     recurrenceEnd,
     completedDates: Array.isArray(event.completedDates) ? event.completedDates.filter(isValidIsoDate) : [],
     skippedDates: Array.isArray(event.skippedDates) ? event.skippedDates.filter(isValidIsoDate) : [],
+    appliedTransactionIds,
   };
 }
 
@@ -980,7 +997,7 @@ function ProjectionChart({
   );
 }
 
-function createEventDraft(today: Date): Omit<CalendarEvent, "id"> {
+function createEventDraft(today: Date, accountId = DEFAULT_ACCOUNTS[0]?.id ?? ""): Omit<CalendarEvent, "id"> {
   return {
     date: toIsoDate(today),
     title: "",
@@ -989,12 +1006,15 @@ function createEventDraft(today: Date): Omit<CalendarEvent, "id"> {
     numericAmount: 0,
     tone: "blue",
     kind: "expense",
+    accountId,
+    toAccountId: null,
     destination: "none",
     includeInProjection: false,
     recurrence: "none",
     recurrenceEnd: null,
     completedDates: [],
     skippedDates: [],
+    appliedTransactionIds: {},
   };
 }
 
@@ -1068,6 +1088,7 @@ export default function Home() {
   const [activityFilter, setActivityFilter] = useState<"all" | TransactionKind>("all");
   const [activityCategory, setActivityCategory] = useState("all");
   const [activitySearch, setActivitySearch] = useState("");
+  const [activityMonth, setActivityMonth] = useState(() => monthKeyFromDate(today));
   const [activityFiltersOpen, setActivityFiltersOpen] = useState(false);
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
   const [categoryDraftName, setCategoryDraftName] = useState("");
@@ -1076,7 +1097,8 @@ export default function Home() {
   const [plannedMovementsOpen, setPlannedMovementsOpen] = useState(false);
   const [eventEditorOpen, setEventEditorOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
-  const [eventDraft, setEventDraft] = useState<Omit<CalendarEvent, "id">>(() => createEventDraft(today));
+  const [eventDraft, setEventDraft] = useState<Omit<CalendarEvent, "id">>(() => createEventDraft(today, DEFAULT_ACCOUNTS[0].id));
+  const [eventError, setEventError] = useState("");
   const [removedEvent, setRemovedEvent] = useState<CalendarEvent | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDraftAccountId, setSelectedDraftAccountId] = useState(DEFAULT_ACCOUNTS[0].id);
@@ -1154,7 +1176,7 @@ export default function Home() {
   const visibleEvents = useMemo(() => getEventOccurrences(events, calendarMonth), [events, calendarMonth]);
   const annualProjectionPoints = comparisonPoints.filter((point) => point.month === 0 || point.month % 12 === 0 || point.month === years * 12);
   const selectedDraftAccount = draftAccounts.find((account) => account.id === selectedDraftAccountId) ?? draftAccounts[0] ?? null;
-  const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonthKey = monthKeyFromDate(today);
   const currentMonthTransactions = transactions.filter((transaction) => transaction.date.startsWith(currentMonthKey));
   const monthIncome = currentMonthTransactions.filter((transaction) => transaction.kind === "income").reduce((sum, transaction) => sum + transaction.amount, 0);
   const monthExpense = currentMonthTransactions.filter((transaction) => transaction.kind === "expense").reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -1162,6 +1184,25 @@ export default function Home() {
   const savingsRate = monthIncome > 0 ? Math.max(-100, Math.min(100, (monthNet / monthIncome) * 100)) : null;
   const reserveGap = Math.max(0, target - reserve);
   const deferredActivitySearch = useDeferredValue(activitySearch);
+  const activityMonthOptions = useMemo(() => {
+    const transactionMonths = transactions.map((transaction) => transaction.date.slice(0, 7));
+    const startKey = transactionMonths.length > 0 ? transactionMonths.reduce((earliest, key) => key < earliest ? key : earliest, currentMonthKey) : currentMonthKey;
+    const endKey = transactionMonths.length > 0 ? transactionMonths.reduce((latest, key) => key > latest ? key : latest, currentMonthKey) : currentMonthKey;
+    const options: string[] = [];
+    let cursor = startKey;
+    while (cursor <= endKey && options.length < 240) {
+      options.push(cursor);
+      cursor = shiftMonthKey(cursor, 1);
+    }
+    if (!options.includes(currentMonthKey)) options.push(currentMonthKey);
+    return options.sort((a, b) => b.localeCompare(a));
+  }, [transactions, currentMonthKey]);
+  const visibleActivityMonth = activityMonthOptions.includes(activityMonth) ? activityMonth : currentMonthKey;
+  const activityMonthTransactions = transactions.filter((transaction) => transaction.date.startsWith(visibleActivityMonth));
+  const activityMonthIncome = activityMonthTransactions.filter((transaction) => transaction.kind === "income").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const activityMonthExpense = activityMonthTransactions.filter((transaction) => transaction.kind === "expense").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const activityMonthNet = activityMonthIncome - activityMonthExpense;
+  const activityMonthLabel = formatMonthGroupLabel(visibleActivityMonth);
   const cashflowData = useMemo<CashflowPoint[]>(() => Array.from({ length: 6 }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth() - 5 + index, 1, 12);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -1176,11 +1217,12 @@ export default function Home() {
   const filteredTransactions = useMemo(() => {
     const query = deferredActivitySearch.trim().toLocaleLowerCase("es-MX");
     return transactions
+      .filter((transaction) => transaction.date.startsWith(visibleActivityMonth))
       .filter((transaction) => activityFilter === "all" || transaction.kind === activityFilter)
       .filter((transaction) => activityCategory === "all" || transaction.category === activityCategory)
       .filter((transaction) => !query || `${transaction.title} ${transaction.category} ${transaction.note}`.toLocaleLowerCase("es-MX").includes(query))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, activityFilter, activityCategory, deferredActivitySearch]);
+  }, [transactions, visibleActivityMonth, activityFilter, activityCategory, deferredActivitySearch]);
   const activityFiltersActive = activityFilter !== "all" || activityCategory !== "all" || Boolean(activitySearch.trim());
   const activityFilterChips: FilterChip[] = [
     activitySearch.trim() ? { id: "search", label: `Busca: ${activitySearch.trim()}`, onRemove: () => setActivitySearch("") } : null,
@@ -1197,7 +1239,7 @@ export default function Home() {
       if (transaction.kind === "expense") group.expense += transaction.amount;
       groups.set(key, group);
     });
-    return Array.from(groups.values());
+    return Array.from(groups.values()).sort((a, b) => b.key.localeCompare(a.key));
   }, [filteredTransactions]);
   const allocation = [
     { key: "cash", label: "Disponible", value: cash, color: "var(--cash)" },
@@ -1751,8 +1793,11 @@ export default function Home() {
   }
 
   function openNewEvent() {
+    const sourceAccount = accounts.find((account) => account.group === "cash") ?? accounts[0];
+    const destinationAccount = accounts.find((account) => account.id !== sourceAccount?.id);
     setEditingEventId(null);
-    setEventDraft(createEventDraft(today));
+    setEventError("");
+    setEventDraft({ ...createEventDraft(today, sourceAccount?.id ?? ""), toAccountId: destinationAccount?.id ?? null });
     setPlannedMovementsOpen(true);
     setEventEditorOpen(true);
   }
@@ -1765,35 +1810,123 @@ export default function Home() {
   function editEvent(id: number) {
     const event = events.find((item) => item.id === id);
     if (!event) return;
+    const sourceAccount = accounts.find((account) => account.group === "cash") ?? accounts[0];
+    const destinationAccount = accounts.find((account) => account.id !== (event.accountId || sourceAccount?.id));
     setEditingEventId(id);
-    setEventDraft({ ...event, amount: formatTransactionInput(event.numericAmount) });
+    setEventError("");
+    setEventDraft({
+      ...event,
+      amount: formatTransactionInput(event.numericAmount),
+      accountId: event.accountId || sourceAccount?.id || "",
+      toAccountId: event.toAccountId ?? (event.kind === "contribution" || event.kind === "transfer" ? destinationAccount?.id ?? null : null),
+    });
     setPlannedMovementsOpen(true);
     setEventEditorOpen(true);
   }
 
   function saveEvent() {
+    const numericAmount = parseMoneyInput(eventDraft.amount) || eventDraft.numericAmount;
+    const requiresDestination = eventDraft.kind === "transfer" || eventDraft.kind === "contribution";
     if (!eventDraft.title.trim() || !eventDraft.date) return;
-    const normalizedDraft = { ...eventDraft, amount: eventDraft.numericAmount > 0 ? formatTransactionMoney(eventDraft.numericAmount) : "$0" };
+    if (!eventDraft.accountId || !accounts.some((account) => account.id === eventDraft.accountId)) {
+      setEventError("Elige la cuenta que se verá afectada.");
+      return;
+    }
+    if (numericAmount <= 0) {
+      setEventError("Ingresa un monto mayor a cero para poder aplicarlo después.");
+      return;
+    }
+    if (requiresDestination && (!eventDraft.toAccountId || eventDraft.toAccountId === eventDraft.accountId || !accounts.some((account) => account.id === eventDraft.toAccountId))) {
+      setEventError("Elige una cuenta destino distinta.");
+      return;
+    }
+    const normalizedDraft = {
+      ...eventDraft,
+      amount: formatTransactionMoney(numericAmount),
+      numericAmount,
+      toAccountId: requiresDestination ? eventDraft.toAccountId : null,
+    };
     setEvents((current) => editingEventId === null
       ? [...current, { ...normalizedDraft, id: Math.max(0, ...current.map((event) => event.id)) + 1 }]
       : current.map((event) => event.id === editingEventId ? { ...normalizedDraft, id: editingEventId } : event));
     markDataPersonal();
     const nextMonth = new Date(`${eventDraft.date}T12:00:00`);
     setCalendarMonth(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1));
-    setEventDraft(createEventDraft(today));
+    setEventDraft(createEventDraft(today, accounts.find((account) => account.group === "cash")?.id ?? accounts[0]?.id ?? ""));
+    setEventError("");
     setEditingEventId(null);
     setEventEditorOpen(false);
   }
 
   function toggleOccurrenceCompleted(event: CalendarOccurrence) {
+    const isCompleted = event.completedDates.includes(event.date);
+    const transactionId = event.appliedTransactionIds[event.date];
+    const appliedTransaction = transactionId ? transactions.find((transaction) => transaction.id === transactionId) : null;
+
+    if (isCompleted) {
+      if (appliedTransaction) {
+        const reversedAccounts = adjustAccountsForTransaction(accounts, appliedTransaction, -1);
+        if (reversedAccounts.some((account) => account.amount < 0)) {
+          showToast("No se puede deshacer porque la cuenta ya no tiene saldo suficiente.", "warning");
+          return;
+        }
+        setAccounts(reversedAccounts);
+        setTransactions((current) => current.filter((transaction) => transaction.id !== appliedTransaction.id));
+      }
+      setEvents((current) => current.map((item) => {
+        if (item.id !== event.sourceId) return item;
+        const nextAppliedTransactionIds = { ...item.appliedTransactionIds };
+        delete nextAppliedTransactionIds[event.date];
+        return {
+          ...item,
+          completedDates: item.completedDates.filter((date) => date !== event.date),
+          appliedTransactionIds: nextAppliedTransactionIds,
+        };
+      }));
+      markDataPersonal();
+      showToast("Movimiento reabierto; puedes aplicarlo de nuevo.");
+      return;
+    }
+
+    const transactionKind: TransactionKind = event.kind === "contribution" ? "transfer" : event.kind;
+    const toAccountId = transactionKind === "transfer" ? event.toAccountId : null;
+    if (!event.accountId || !accounts.some((account) => account.id === event.accountId) || (transactionKind === "transfer" && (!toAccountId || !accounts.some((account) => account.id === toAccountId)))) {
+      showToast("Edita el movimiento planeado y elige las cuentas que afectará.", "warning");
+      return;
+    }
+    if (event.numericAmount <= 0) {
+      showToast("Agrega un monto mayor a cero antes de aplicarlo.", "warning");
+      return;
+    }
+    const sourceBalance = accounts.find((account) => account.id === event.accountId)?.amount ?? 0;
+    if ((transactionKind === "expense" || transactionKind === "transfer") && event.numericAmount > sourceBalance) {
+      showToast(`El saldo disponible en ${accountLabel(event.accountId)} es ${formatMoney(sourceBalance)}.`, "warning");
+      return;
+    }
+    const saved: Transaction = {
+      id: createClientId("tx-planned"),
+      date: event.date,
+      title: event.title,
+      amount: event.numericAmount,
+      kind: transactionKind,
+      accountId: event.accountId,
+      toAccountId,
+      category: event.kind === "contribution" ? (accounts.find((account) => account.id === toAccountId)?.group === "investment" ? "Inversión" : "Ahorro") : movementKindLabel(event.kind),
+      note: event.detail ? `${event.detail} · Movimiento planeado` : "Movimiento planeado",
+    };
+    setAccounts(adjustAccountsForTransaction(accounts, saved, 1));
+    setTransactions((current) => [saved, ...current]);
     setEvents((current) => current.map((item) => item.id === event.sourceId
       ? {
         ...item,
-        completedDates: item.completedDates.includes(event.date) ? item.completedDates.filter((date) => date !== event.date) : [...item.completedDates, event.date],
+        completedDates: [...new Set([...item.completedDates, event.date])],
         skippedDates: item.skippedDates.filter((date) => date !== event.date),
+        appliedTransactionIds: { ...item.appliedTransactionIds, [event.date]: saved.id },
       }
       : item));
+    setActivityMonth(event.date.slice(0, 7));
     markDataPersonal();
+    showToast("Movimiento aplicado: apareció en Actividad y actualizó tus cuentas.");
   }
 
   function skipOccurrence(event: CalendarOccurrence) {
@@ -2008,32 +2141,36 @@ export default function Home() {
           <span className="planned-movements-mark" aria-hidden="true">{plannedMovementsOpen ? "−" : "+"}</span>
         </button>
         {plannedMovementsOpen && <div id="planned-movements-body" className="planned-movements-body">
-          <div className="planned-movements-intro"><p>Programa ingresos, gastos o aportaciones sin mezclarlos con tus movimientos reales. Activa la repetición solo cuando aplique.</p><button type="button" className={eventEditorOpen ? "secondary-button" : "primary-button"} onClick={() => { if (eventEditorOpen) { setEventEditorOpen(false); setEditingEventId(null); } else { openNewEvent(); } }}>{eventEditorOpen ? "Cerrar formulario" : "+ Planear movimiento"}</button></div>
+          <div className="planned-movements-intro"><p>Programa un movimiento y elige las cuentas que afectará. Cuando lo realices, pulsa “Aplicar” para llevarlo a Actividad y actualizar sus saldos.</p><button type="button" className={eventEditorOpen ? "secondary-button" : "primary-button"} onClick={() => { if (eventEditorOpen) { setEventEditorOpen(false); setEditingEventId(null); setEventError(""); } else { openNewEvent(); } }}>{eventEditorOpen ? "Cerrar formulario" : "+ Planear movimiento"}</button></div>
           {eventEditorOpen && (
             <div className="event-form panel">
               <div className="event-form-head"><div><span className="editing-badge">{editingEventId === null ? "NUEVO" : "EDITANDO SERIE"}</span><strong>Configura el movimiento</strong></div><span>{eventDraft.recurrence === "none" ? "Una sola fecha" : recurrenceLabel(eventDraft.recurrence)}</span></div>
               <div className="event-form-grid">
                 <label>Primera fecha<input type="date" value={eventDraft.date} onChange={(event) => setEventDraft((current) => ({ ...current, date: event.target.value, recurrenceEnd: current.recurrenceEnd && current.recurrenceEnd < event.target.value ? event.target.value : current.recurrenceEnd }))} /></label>
                 <label>Movimiento<input type="text" placeholder="Ej. Pagar tarjeta" value={eventDraft.title} onChange={(event) => setEventDraft((current) => ({ ...current, title: event.target.value }))} /></label>
-                <label>Tipo<select value={eventDraft.kind} onChange={(event) => { const kind = event.target.value as MovementKind; setEventDraft((current) => ({ ...current, kind, includeInProjection: kind === "transfer" ? false : current.includeInProjection, destination: kind === "transfer" ? "none" : current.destination })); }}><option value="expense">Gasto</option><option value="income">Ingreso</option><option value="transfer">Transferencia</option><option value="contribution">Aportación</option></select></label>
+                <label>Tipo<select value={eventDraft.kind} onChange={(event) => { const kind = event.target.value as MovementKind; const requiresDestination = kind === "transfer" || kind === "contribution"; setEventDraft((current) => ({ ...current, kind, includeInProjection: kind === "transfer" ? false : current.includeInProjection, destination: kind === "transfer" ? "none" : current.destination, toAccountId: requiresDestination ? current.toAccountId ?? accounts.find((account) => account.id !== current.accountId)?.id ?? null : null })); }}><option value="expense">Gasto</option><option value="income">Ingreso</option><option value="transfer">Transferencia</option><option value="contribution">Aportación</option></select></label>
                 <label>Monto<input type="text" inputMode="decimal" placeholder="Ej. 2,500.00" value={eventDraft.amount} onChange={(event) => setEventDraft((current) => ({ ...current, amount: event.target.value, numericAmount: parseMoneyInput(event.target.value) }))} onBlur={() => setEventDraft((current) => ({ ...current, amount: formatTransactionInput(current.numericAmount) }))} /></label>
                 <label>Nota <span className="optional">opcional</span><input type="text" placeholder="Ej. Servicios del mes" value={eventDraft.detail} onChange={(event) => setEventDraft((current) => ({ ...current, detail: event.target.value }))} /></label>
                 <label>Repetición<select value={eventDraft.recurrence} onChange={(event) => setEventDraft((current) => ({ ...current, recurrence: event.target.value as EventRecurrence, recurrenceEnd: event.target.value === "none" ? null : current.recurrenceEnd }))}><option value="none">No se repite</option><option value="weekly">Cada semana</option><option value="monthly">Cada mes</option><option value="annual">Cada año</option></select></label>
                 {eventDraft.recurrence !== "none" && <label>Termina <span className="optional">opcional</span><input type="date" min={eventDraft.date} value={eventDraft.recurrenceEnd ?? ""} onChange={(event) => setEventDraft((current) => ({ ...current, recurrenceEnd: event.target.value || null }))} /><small>Vacío = sin fecha final</small></label>}
                 {eventDraft.kind !== "transfer" && <label>Destino en proyección<select value={eventDraft.destination} onChange={(event) => setEventDraft((current) => ({ ...current, destination: event.target.value as ProjectionDestination, includeInProjection: event.target.value !== "none" }))}><option value="none">No incluir</option><option value="cetes">Reserva / CETES</option><option value="gbm">Inversión</option></select></label>}
+                <label>{eventDraft.kind === "transfer" || eventDraft.kind === "contribution" ? "Desde" : "Cuenta que afectará"}<select aria-label="Cuenta que afectará" value={eventDraft.accountId} onChange={(event) => setEventDraft((current) => ({ ...current, accountId: event.target.value, toAccountId: current.toAccountId === event.target.value ? accounts.find((account) => account.id !== event.target.value)?.id ?? null : current.toAccountId }))}><option value="">Selecciona una cuenta</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>
+                {(eventDraft.kind === "transfer" || eventDraft.kind === "contribution") && <label>Hacia<select aria-label="Cuenta destino del movimiento planeado" value={eventDraft.toAccountId ?? ""} onChange={(event) => setEventDraft((current) => ({ ...current, toAccountId: event.target.value || null }))}><option value="">Selecciona destino</option>{accounts.filter((account) => account.id !== eventDraft.accountId).map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>}
               </div>
-              <div className="event-form-actions"><small>{eventDraft.recurrence === "none" ? "Se agregará un solo movimiento." : `${recurrenceLabel(eventDraft.recurrence)} desde ${eventDraft.date}${eventDraft.recurrenceEnd ? ` hasta ${eventDraft.recurrenceEnd}` : ", sin fecha final"}.`}{eventDraft.includeInProjection ? " Su monto se reflejará en la proyección." : ""}</small><button type="button" className="primary-button" disabled={!eventDraft.title.trim() || !eventDraft.date} onClick={saveEvent}>{editingEventId === null ? "Guardar movimiento" : "Guardar cambios"}</button></div>
+              <div className="event-form-actions"><small>{eventError || `${eventDraft.recurrence === "none" ? "Se agregará un solo movimiento." : `${recurrenceLabel(eventDraft.recurrence)} desde ${eventDraft.date}${eventDraft.recurrenceEnd ? ` hasta ${eventDraft.recurrenceEnd}` : ", sin fecha final"}.`}${eventDraft.includeInProjection ? " Su monto se reflejará en la proyección." : ""}`}</small><button type="button" className="primary-button" disabled={!eventDraft.title.trim() || !eventDraft.date} onClick={saveEvent}>{editingEventId === null ? "Guardar movimiento" : "Guardar cambios"}</button></div>
             </div>
           )}
           {removedEvent && <div className="undo-banner" role="status"><span>Movimiento eliminado.</span><button type="button" onClick={undoEventRemoval}>Deshacer</button><button type="button" aria-label="Cerrar aviso" onClick={() => setRemovedEvent(null)}>×</button></div>}
           <div className="agenda-grid">
             <div className="events-card">
-              <div className="events-head"><div className="events-period"><button type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} aria-label="Mes anterior">‹</button><strong>{monthNames[calendarMonth.getMonth()]}</strong><button type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} aria-label="Mes siguiente">›</button></div><span>{visibleEvents.length} movimiento{visibleEvents.length === 1 ? "" : "s"}</span></div>
+              <div className="events-head"><div className="events-period"><button type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} aria-label="Mes anterior">‹</button><strong>{monthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}</strong><button type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} aria-label="Mes siguiente">›</button></div><span>{visibleEvents.length} movimiento{visibleEvents.length === 1 ? "" : "s"}</span></div>
               {visibleEvents.length === 0 ? <div className="events-empty">No hay movimientos planeados en este mes.</div> : visibleEvents.map((event) => {
                 const eventDay = Number(event.date.slice(-2));
                 const isPast = event.date < todayIso;
-                const isCompleted = isPast || event.completedDates.includes(event.date);
-                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatTransactionMoney(event.numericAmount) : "Sin monto"}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isPast ? "Fecha pasada" : isCompleted ? "Completado" : "Pendiente"}</span>{!isPast && <button type="button" className="event-primary-action" onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Reabrir" : "Hecho"}</button>}<ActionMenu label={`Más acciones para ${event.title}`} items={[...(event.recurrence !== "none" && !isPast && !isCompleted ? [{ label: "Omitir", onSelect: () => skipOccurrence(event) }] : []), { label: "Editar", onSelect: () => editEvent(event.sourceId) }, { label: event.recurrence === "none" ? "Eliminar" : "Eliminar serie", danger: true, onSelect: () => removeEventSeries(event.sourceId) }]} /></div></div>;
+                const isCompleted = event.completedDates.includes(event.date);
+                const requiresDestination = event.kind === "transfer" || event.kind === "contribution";
+                const canApply = event.numericAmount > 0 && Boolean(event.accountId) && (!requiresDestination || Boolean(event.toAccountId && event.toAccountId !== event.accountId));
+                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatTransactionMoney(event.numericAmount) : "Sin monto"} · {accountLabel(event.accountId)}{requiresDestination ? ` → ${accountLabel(event.toAccountId)}` : ""}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isCompleted ? "Aplicado" : isPast ? "Vencido" : "Pendiente"}</span><button type="button" className="event-primary-action" disabled={!isCompleted && !canApply} onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Deshacer" : "Aplicar"}</button><ActionMenu label={`Más acciones para ${event.title}`} items={[...(event.recurrence !== "none" && !isPast && !isCompleted ? [{ label: "Omitir", onSelect: () => skipOccurrence(event) }] : []), { label: "Editar", onSelect: () => editEvent(event.sourceId) }, { label: event.recurrence === "none" ? "Eliminar" : "Eliminar serie", danger: true, onSelect: () => removeEventSeries(event.sourceId) }]} /></div></div>;
               })}
             </div>
           </div>
@@ -2171,15 +2308,15 @@ export default function Home() {
           />
 
           <ContextRail label="Estado de actividad">
-            <span><i className="status-dot green" /> {currentMonthTransactions.length} movimientos este mes</span>
-            <span>{activityFiltersActive ? "Filtros activos" : "Mostrando toda la actividad"}</span>
+            <span><i className="status-dot green" /> {activityMonthTransactions.length} movimientos en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span>
+            <span>{activityFiltersActive ? "Filtros activos" : "Mostrando el mes seleccionado"}</span>
             <span className="context-rail-hint">Los traspasos no alteran tu flujo neto.</span>
           </ContextRail>
 
           <section className="activity-stat-grid" aria-label="Resumen del mes">
-            <article><span>Entró este mes</span><strong className="positive-value">+{formatMoney(monthIncome)}</strong><small>{currentMonthTransactions.filter((transaction) => transaction.kind === "income").length} {currentMonthTransactions.filter((transaction) => transaction.kind === "income").length === 1 ? "ingreso" : "ingresos"}</small></article>
-            <article><span>Salió este mes</span><strong>−{formatMoney(monthExpense)}</strong><small>{currentMonthTransactions.filter((transaction) => transaction.kind === "expense").length} {currentMonthTransactions.filter((transaction) => transaction.kind === "expense").length === 1 ? "gasto" : "gastos"}</small></article>
-            <article className={monthNet >= 0 ? "is-positive" : "is-negative"}><span>Flujo neto</span><strong>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}</strong><small>{monthNet >= 0 ? "Disponible para tus prioridades" : "Gastaste más de lo que ingresó"}</small></article>
+            <article><span>Entró en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span><strong className="positive-value">+{formatMoney(activityMonthIncome)}</strong><small>{activityMonthTransactions.filter((transaction) => transaction.kind === "income").length} {activityMonthTransactions.filter((transaction) => transaction.kind === "income").length === 1 ? "ingreso" : "ingresos"}</small></article>
+            <article><span>Salió en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span><strong>−{formatMoney(activityMonthExpense)}</strong><small>{activityMonthTransactions.filter((transaction) => transaction.kind === "expense").length} {activityMonthTransactions.filter((transaction) => transaction.kind === "expense").length === 1 ? "gasto" : "gastos"}</small></article>
+            <article className={activityMonthNet >= 0 ? "is-positive" : "is-negative"}><span>Flujo neto</span><strong>{activityMonthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(activityMonthNet))}</strong><small>{activityMonthNet >= 0 ? "Disponible para tus prioridades" : "Gastaste más de lo que ingresó"}</small></article>
           </section>
 
           <section className="panel activity-chart-card">
@@ -2189,7 +2326,13 @@ export default function Home() {
 
           <section className="panel ledger-card">
             <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Movimientos por mes</h2><p>Encuentra una operación por tipo, categoría o concepto.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
-             <div className="ledger-toolbar">
+            <div className="activity-month-selector" aria-label="Cambiar mes en vista">
+              <button type="button" className="month-step-button" aria-label="Mes anterior" disabled={visibleActivityMonth <= (activityMonthOptions.at(-1) ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, -1))}>‹</button>
+              <label><span className="sr-only">Mes en vista</span><select aria-label="Mes en vista" value={visibleActivityMonth} onChange={(event) => setActivityMonth(event.target.value)}>{activityMonthOptions.map((month) => <option key={month} value={month}>{formatMonthGroupLabel(month)}</option>)}</select></label>
+              <button type="button" className="month-step-button" aria-label="Mes siguiente" disabled={visibleActivityMonth >= (activityMonthOptions[0] ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, 1))}>›</button>
+              {visibleActivityMonth !== currentMonthKey && <button type="button" className="text-button current-month-button" onClick={() => setActivityMonth(currentMonthKey)}>Ir al mes actual</button>}
+            </div>
+            <div className="ledger-toolbar">
                <button
                  type="button"
                  className="filter-toggle"
@@ -2207,7 +2350,7 @@ export default function Home() {
                  </div>
                  <label className="category-filter"><span>Categoría</span><select aria-label="Filtrar por categoría" value={activityCategory} onChange={(event) => setActivityCategory(event.target.value)}><option value="all">Todas</option>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
                </div>
-               <span className="ledger-result-count" aria-live="polite" aria-busy={activitySearch !== deferredActivitySearch}>{filteredTransactions.length} de {transactions.length} movimiento{transactions.length === 1 ? "" : "s"} · {groupedTransactions.length} {groupedTransactions.length === 1 ? "mes" : "meses"}</span>
+               <span className="ledger-result-count" aria-live="polite" aria-busy={activitySearch !== deferredActivitySearch}>{filteredTransactions.length} de {activityMonthTransactions.length} movimiento{activityMonthTransactions.length === 1 ? "" : "s"} en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span>
             </div>
              <FilterChips chips={activityFilterChips} onClear={clearActivityFilters} />
              {filteredTransactions.length === 0 ? (
