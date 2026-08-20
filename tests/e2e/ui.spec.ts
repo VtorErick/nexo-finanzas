@@ -86,7 +86,7 @@ test.describe("Nexo UI flows", () => {
     await expect(tabBar).toBeVisible();
 
     await tabBar.getByRole("button", { name: "Más" }).click();
-    await tabBar.getByRole("button", { name: "Datos" }).click();
+    await tabBar.getByRole("menuitem", { name: "Datos" }).click();
     await expect(page).toHaveURL(/\?view=data$/);
     await expect(page.getByRole("heading", { name: "Tus datos." })).toBeVisible();
     await expect(page.locator(".backup-flow-steps li")).toHaveCount(3);

@@ -80,9 +80,10 @@ textarea:disabled {
 
 .tab-bar button {
   position: relative;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .tab-bar button .icon {
@@ -179,9 +180,10 @@ textarea:disabled {
   }
 
   .mobile-topbar .brand-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
 }
 
@@ -753,9 +755,10 @@ summary:focus-visible {
   }
 
   .view-orientation small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .mobile-view-label {
@@ -1579,4 +1582,208 @@ summary:focus-visible {
   overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
+}
+
+/* ============================================================
+   Corrección final responsive · lectura sin compresión
+   ============================================================ */
+
+/* Los importes son datos indivisibles: nunca se parten en medio de una cifra. */
+.metric-card-value,
+.account-balance,
+.account-group-heading b,
+.transaction-amount,
+.hero-amount,
+.extra-saved-amount,
+.cashflow-summary strong,
+.projection-summary-head strong,
+.projection-metric strong,
+.chart-readout-grid b {
+  overflow-wrap: normal;
+  text-overflow: clip;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+/* Ninguna etiqueta visible debe desaparecer por elipsis. Los textos largos
+   crecen en varias líneas sin invadir el siguiente control. */
+.account-name strong,
+.account-name small,
+.account-rate,
+.account-selector strong,
+.transaction-copy strong,
+.transaction-copy small,
+.extras-toggle-copy small,
+.reference-summary-copy small,
+.view-orientation small,
+.plan-guide-step strong,
+.plan-guide-step small,
+.planned-movements-copy small,
+.cashflow-column small,
+.tab-bar button,
+.mobile-topbar .brand-text,
+.advanced-plan-toggle,
+.data-mode-chip {
+  max-width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+@media (max-width: 699px) {
+  /* La barra móvil es parte de la navegación, no debe tapar el encabezado. */
+  .page-wrap {
+    padding-top: 82px;
+  }
+
+  #contenido,
+  #inicio,
+  #cuentas,
+  #agenda,
+  #proyeccion,
+  #respaldo,
+  .compact-simulation {
+    scroll-margin-top: 100px;
+  }
+
+  .view-header {
+    scroll-margin-top: 84px;
+  }
+
+  /* Tres tarjetas angostas hacían ilegibles los saldos. Cada resumen ocupa
+     una fila completa y conserva una jerarquía estable icono > etiqueta > valor. */
+  .overview-grid {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-grid .net-worth-card {
+    grid-column: auto;
+  }
+
+  .overview-grid .metric-card {
+    align-items: center;
+    column-gap: 12px;
+    display: grid;
+    grid-template-areas:
+      "icon label"
+      "icon value"
+      "icon detail";
+    grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 96px;
+    padding: 16px;
+    row-gap: 3px;
+  }
+
+  .overview-grid .metric-card .metric-card-icon {
+    align-self: center;
+    grid-area: icon;
+    height: 38px;
+    width: 38px;
+  }
+
+  .overview-grid .metric-card .metric-card-label,
+  .overview-grid .metric-card .metric-card-value,
+  .overview-grid .metric-card .metric-card-detail {
+    grid-column: auto;
+    max-width: 100%;
+  }
+
+  .overview-grid .metric-card .metric-card-label {
+    align-self: end;
+    grid-area: label;
+    margin: 0;
+  }
+
+  .overview-grid .metric-card .metric-card-value {
+    align-self: center;
+    font-size: clamp(22px, 6.4vw, 28px);
+    grid-area: value;
+    line-height: 1.05;
+    margin: 0;
+  }
+
+  .overview-grid .metric-card .metric-card-detail {
+    align-self: start;
+    grid-area: detail;
+    line-height: 1.3;
+  }
+
+  /* En pantallas muy estrechas el valor conserva su integridad y el resto
+     de la tarjeta reduce espacio antes de volver a comprimir la cifra. */
+  .overview-grid .metric-card .metric-card-value {
+    letter-spacing: -0.035em;
+  }
+
+  .overview-grid .metric-card .metric-card-detail {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  /* Plan: cada bloque de lectura tiene separación lateral propia. El margen
+     negativo heredado dejaba las etiquetas pegadas al borde de la tarjeta. */
+  .projection-heading,
+  .projection-heading > div,
+  .projection-summary-head,
+  .projection-summary-head > div {
+    min-width: 0;
+  }
+
+  .projection-heading h2,
+  .projection-heading p,
+  .projection-summary-head span,
+  .projection-summary-head small,
+  .projection-interpretation span,
+  .projection-interpretation small,
+  .projection-story span,
+  .projection-story small,
+  .projection-scope-copy {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .projection-summary-head {
+    align-items: flex-start;
+    display: grid;
+    gap: 8px;
+    padding: 18px;
+  }
+
+  .projection-badge {
+    justify-self: start;
+  }
+
+  .projection-interpretation {
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
+    padding: 0;
+  }
+
+  .projection-interpretation > div,
+  .projection-interpretation > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 12px 18px;
+  }
+
+  .projection-interpretation > div:first-child {
+    border-top: 0;
+  }
+
+  .projection-interpretation strong {
+    font-size: 18px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .projection-story > div {
+    padding: 12px 4px;
+  }
+
+  .projection-story strong {
+    font-size: 17px;
+    white-space: nowrap;
+  }
 }

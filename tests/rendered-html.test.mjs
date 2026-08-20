@@ -233,6 +233,10 @@ test("defines accessible light and dark themes with distinguishable chart series
   assert.match(foundation, /\.context-rail/);
   assert.match(foundation, /\.mobile-view-label/);
   assert.match(foundation, /\.form-stepper/);
+  assert.match(foundation, /grid-template-columns: minmax\(0, 1fr\);[\s\S]*\.overview-grid \.metric-card/);
+  assert.match(foundation, /\.projection-interpretation > div:first-child/);
+  assert.doesNotMatch(css, /text-overflow: ellipsis/);
+  assert.doesNotMatch(foundation, /text-overflow: ellipsis/);
 });
 
 test("defines a privacy-safe static build for Vercel", async () => {

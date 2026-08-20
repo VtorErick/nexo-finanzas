@@ -412,14 +412,14 @@ select {
 .account-monogram.reserve { background: var(--mint-light); color: var(--accent-strong); }
 .account-monogram.investment { background: var(--violet-light); color: var(--violet); }
 .account-monogram.cash { background: var(--blue-light); color: var(--blue); }
-.account-name strong, .account-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-name strong, .account-name small { display: block; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .account-name strong { font-size: 14px; font-weight: 700; }
 .account-name small { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .type-pill { border-radius: 999px; display: inline-flex; font-size: 11.5px; font-weight: 700; justify-self: start; padding: 5px 9px; }
 .type-pill.reserve { background: var(--mint-light); color: var(--accent-strong); }
 .type-pill.investment { background: var(--violet-light); color: var(--violet); }
 .type-pill.cash { background: var(--blue-light); color: var(--blue); }
-.account-rate { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-rate { color: var(--muted); font-size: 12px; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .account-balance { font-family: var(--font-num); font-size: 14.5px; font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
 
 .side-column .panel { padding: 24px; }
@@ -720,7 +720,7 @@ html:not([data-theme="dark"]) .undo-banner button:first-of-type { color: #c4b5fd
 .account-selector button { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 12px; color: var(--ink-soft); cursor: pointer; display: grid; gap: 11px; grid-template-columns: 36px 1fr; min-height: 60px; padding: 8px 10px; text-align: left; transition: background 150ms ease, border-color 150ms ease; }
 .account-selector button:hover, .account-selector button.active { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-sm); }
 .account-selector button > span:last-child { display: grid; gap: 3px; min-width: 0; }
-.account-selector strong { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-selector strong { font-size: 13.5px; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .account-selector small { color: var(--muted); font-family: var(--font-num); font-size: 12px; font-variant-numeric: tabular-nums; }
 .account-input { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
 .account-input.reserve { border-top: 3px solid var(--accent); }
@@ -1850,7 +1850,7 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 .cashflow-bars span { border-radius: 4px 4px 1px 1px; display: block; max-width: 18px; min-height: 3px; transition: height 260ms ease; width: 33%; }
 .income-bar { background: var(--reserve); }
 .expense-bar { background: var(--expense); opacity: 0.78; }
-.cashflow-column small { color: var(--muted); font-size: 10.5px; overflow: hidden; text-align: center; text-transform: capitalize; }
+.cashflow-column small { color: var(--muted); font-size: 10.5px; overflow: visible; overflow-wrap: anywhere; text-align: center; text-transform: capitalize; white-space: normal; }
 .chart-key { align-items: center; color: var(--muted); display: flex; flex-wrap: wrap; font-size: 11.5px; gap: 16px; }
 .cashflow-panel > .chart-key { justify-content: flex-end; padding: 0 24px 18px; }
 .chart-key span { align-items: center; display: inline-flex; gap: 6px; }
@@ -1895,7 +1895,7 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 .transaction-mark.expense { background: var(--red-light); color: var(--expense); }
 .transaction-mark.transfer { background: var(--blue-light); color: var(--investment); }
 .transaction-copy { min-width: 0; }
-.transaction-copy strong, .transaction-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transaction-copy strong, .transaction-copy small { display: block; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .transaction-copy strong { font-size: 14px; font-weight: 720; }
 .transaction-copy small { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .transaction-date { color: var(--muted); font-size: 12px; text-align: right; }
@@ -2198,7 +2198,7 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 .extras-toggle-copy { display: grid; gap: 3px; min-width: 0; }
 .extras-toggle-copy .eyebrow { margin: 0; }
 .extras-toggle-copy strong { font-size: 15px; letter-spacing: -0.2px; }
-.extras-toggle-copy small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extras-toggle-copy small { color: var(--muted); font-size: 12px; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .extras-toggle-icon { align-items: center; background: var(--surface-elevated); border-radius: 50%; color: var(--ink-soft); display: inline-flex; flex: 0 0 auto; font-size: 19px; font-weight: 550; height: 30px; justify-content: center; line-height: 1; width: 30px; }
 .extras-add-button { align-self: center; flex: 0 0 auto; margin-right: 8px; }
 .extras-hint { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 0; padding: 4px 22px 6px; }
@@ -2263,7 +2263,7 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 .reference-summary-copy { display: grid; gap: 3px; min-width: 0; }
 .reference-summary-copy .eyebrow { margin: 0; }
 .reference-summary-copy strong { font-size: 16px; }
-.reference-summary-copy small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reference-summary-copy small { color: var(--muted); font-size: 12px; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .reference-summary-mark { align-items: center; background: var(--surface-elevated); border-radius: 50%; color: var(--ink-soft); display: inline-flex; flex: 0 0 auto; font-size: 0; height: 32px; justify-content: center; width: 32px; }
 .reference-summary-mark::after { content: "+"; font-size: 20px; line-height: 1; }
 .reference-options-panel details[open] .reference-summary-mark { background: var(--ink); color: var(--bg); }
@@ -2364,7 +2364,7 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 .plan-guide-step:first-child { border-left: 0; }
 .plan-guide-step > b { align-items: center; background: var(--surface-accent); border-radius: 50%; color: var(--accent-strong); display: inline-flex; flex: 0 0 auto; font-size: 11px; height: 24px; justify-content: center; width: 24px; }
 .plan-guide-step > span { display: grid; gap: 1px; min-width: 0; }
-.plan-guide-step strong, .plan-guide-step small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-guide-step strong, .plan-guide-step small { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .plan-guide-step strong { font-size: 11.5px; }
 .plan-guide-step small { color: var(--muted); font-size: 10.5px; }
 
@@ -2471,7 +2471,7 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 .planned-movements-copy { display: grid; gap: 3px; min-width: 0; }
 .planned-movements-copy .eyebrow { margin: 0; }
 .planned-movements-copy strong { font-size: 16px; }
-.planned-movements-copy small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planned-movements-copy small { color: var(--muted); font-size: 12px; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .planned-movements-mark { align-items: center; background: var(--surface-elevated); border-radius: 50%; color: var(--ink-soft); display: inline-flex; flex: 0 0 auto; font-size: 20px; height: 32px; justify-content: center; line-height: 1; width: 32px; }
 .planned-movements-body { border-top: 1px solid var(--line-soft); display: grid; gap: 14px; padding: 16px 20px 20px; }
 .planned-movements-intro { align-items: center; display: flex; gap: 16px; justify-content: space-between; }

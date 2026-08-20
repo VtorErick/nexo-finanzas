@@ -2136,7 +2136,7 @@ export default function Home() {
   function renderPlannedMovements() {
     return (
       <section className="panel planned-movements-panel">
-        <button type="button" className="planned-movements-toggle" aria-expanded={plannedMovementsOpen} aria-controls="planned-movements-body" onClick={() => setPlannedMovementsOpen((current) => !current)}>
+        <button type="button" className="planned-movements-toggle" aria-label="Movimientos planeados; abrir para Aplicar movimientos en Actividad" aria-expanded={plannedMovementsOpen} aria-controls="planned-movements-body" onClick={() => setPlannedMovementsOpen((current) => !current)}>
           <span className="planned-movements-copy"><span className="eyebrow">PLANEADOS</span><strong>Movimientos próximos y recurrentes</strong><small>{events.length} {events.length === 1 ? "serie" : "series"} guardadas · {visibleEvents.length} este mes</small></span>
           <span className="planned-movements-mark" aria-hidden="true">{plannedMovementsOpen ? "−" : "+"}</span>
         </button>
