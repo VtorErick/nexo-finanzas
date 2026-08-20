@@ -633,11 +633,13 @@ function BrandMark() {
 }
 
 type IconName = "home" | "wallet" | "calendar" | "trend" | "database" | "sun" | "moon" | "shield" | "cash" | "download" | "target" | "food" | "car" | "services" | "health" | "shopping" | "education" | "entertainment" | "travel" | "work" | "general";
-const NAV_ITEMS: Array<{ id: AppView; label: string; icon: IconName }> = [
-  { id: "overview", label: "Inicio", icon: "home" },
+const PRIMARY_NAV_ITEMS: Array<{ id: AppView; label: string; icon: IconName }> = [
+  { id: "overview", label: "Hoy", icon: "home" },
   { id: "activity", label: "Actividad", icon: "calendar" },
-  { id: "accounts", label: "Cuentas", icon: "wallet" },
   { id: "plan", label: "Plan", icon: "trend" },
+];
+const SECONDARY_NAV_ITEMS: Array<{ id: AppView; label: string; icon: IconName }> = [
+  { id: "accounts", label: "Cuentas", icon: "wallet" },
   { id: "data", label: "Datos", icon: "database" },
 ];
 const ICONS: Record<IconName, ReactNode> = {
@@ -1045,6 +1047,7 @@ export default function Home() {
   const [editingExtraId, setEditingExtraId] = useState<number | null>(null);
   const [creatingExtra, setCreatingExtra] = useState(false);
   const [extrasOpen, setExtrasOpen] = useState(false);
+  const [advancedPlanOpen, setAdvancedPlanOpen] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>(() => createExampleEvents(today));
   const [transactions, setTransactions] = useState<Transaction[]>(() => createExampleTransactions(today));
   const [categories, setCategories] = useState<TransactionCategory[]>(() => DEFAULT_TRANSACTION_CATEGORIES.map((category) => ({ ...category })));
@@ -1222,11 +1225,11 @@ export default function Home() {
       || JSON.stringify([...draftEmergencyIds].sort()) !== JSON.stringify([...emergencyIds].sort());
   }, [accounts, draftAccounts, draftEmergencyIds, emergencyIds]);
   const viewAnnouncement = {
-    overview: "Inicio: resumen de tu dinero y siguiente acción.",
-    activity: "Actividad: historial, filtros y movimientos planeados.",
-    accounts: "Cuentas: saldos, distribución y meta de reserva.",
-    plan: "Plan: proyección, escenarios y supuestos.",
-    data: "Datos: respaldo, importación y privacidad local.",
+    overview: "Hoy: resumen de tu dinero y siguiente acción.",
+    activity: "Movimientos: historial y registro de operaciones.",
+    accounts: "Cuentas: saldos y distribución.",
+    plan: "Plan: resultado estimado y ajustes opcionales.",
+    data: "Datos: respaldo y privacidad local.",
   }[activeView];
   const saveStatus = !storageReady ? "Preparando guardado local…" : lastSavedAt ? "Guardado local confirmado" : "Guardando cambios…";
 
@@ -2039,7 +2042,12 @@ export default function Home() {
     );
   }
 
-  const navigationItems = useMemo<PrimaryNavigationItem[]>(() => NAV_ITEMS.map((item) => ({
+  const navigationItems = useMemo<PrimaryNavigationItem[]>(() => PRIMARY_NAV_ITEMS.map((item) => ({
+    id: item.id,
+    label: item.label,
+    icon: <Icon name={item.icon} size={19} />,
+  })), []);
+  const secondaryNavigationItems = useMemo<PrimaryNavigationItem[]>(() => SECONDARY_NAV_ITEMS.map((item) => ({
     id: item.id,
     label: item.label,
     icon: <Icon name={item.icon} size={19} />,
@@ -2067,6 +2075,7 @@ export default function Home() {
 
       <PrimaryNavigation
         items={navigationItems}
+        secondaryItems={secondaryNavigationItems}
         activeView={activeView}
         onNavigate={(view) => navigateTo(view as AppView)}
         theme={theme}
@@ -2088,8 +2097,8 @@ export default function Home() {
           <ViewHeader
             id="inicio"
             eyebrow={formatHeadingDate(today)}
-            title="Tu dinero, en perspectiva."
-            description={dataMode === "example" ? "Explora Nexo con información ficticia y reemplázala cuando quieras." : "Lo importante de hoy, sin ruido ni hojas de cálculo."}
+            title="Tu dinero hoy."
+            description={dataMode === "example" ? "Explora con datos ficticios y reemplázalos cuando quieras." : "Mira lo importante y decide qué hacer después."}
             sectionIndex={1}
             sectionHint="Revisa primero"
             end={<><span className={`private-pill heading-mode ${dataMode === "example" ? "example" : ""}`}><i /> {modeLabel}</span><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Registrar movimiento</button></>}
@@ -2112,8 +2121,8 @@ export default function Home() {
 
           <section className="overview-insight-grid">
             <article className="panel cashflow-panel">
-              <div className="panel-heading"><div><span className="eyebrow">RITMO FINANCIERO</span><h2>Flujo de efectivo</h2><p>Ingresos y gastos reales, sin contar transferencias.</p></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver actividad <span aria-hidden="true">→</span></button></div>
-              <div className="cashflow-summary"><div><span>Ingresos del mes</span><strong className="positive-value">{formatMoney(monthIncome)}</strong></div><div><span>Gastos del mes</span><strong>{formatMoney(monthExpense)}</strong></div><div><span>Tasa de ahorro</span><strong>{savingsRate === null ? "—" : `${savingsRate.toLocaleString("es-MX", { maximumFractionDigits: 0 })}%`}</strong></div></div>
+              <div className="panel-heading"><div><span className="eyebrow">ESTE MES</span><h2>Entró y salió</h2><p>Un resumen corto de tus movimientos reales.</p></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver movimientos <span aria-hidden="true">→</span></button></div>
+              <div className="cashflow-summary"><div><span>Entró</span><strong className="positive-value">{formatMoney(monthIncome)}</strong></div><div><span>Salió</span><strong>{formatMoney(monthExpense)}</strong></div><div className="overview-secondary-metric"><span>Resultado</span><strong>{savingsRate === null ? "—" : `${savingsRate.toLocaleString("es-MX", { maximumFractionDigits: 0 })}%`}</strong></div></div>
                <div className="overview-flow-link"><span>El detalle mensual vive en Actividad, junto con tus filtros y categorías.</span><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver detalle <span aria-hidden="true">→</span></button></div>
             </article>
 
@@ -2139,7 +2148,7 @@ export default function Home() {
            <section className="panel recent-panel">
              <div className="panel-heading"><div><span className="eyebrow">RECIENTE</span><h2>Últimos movimientos</h2></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver todos <span aria-hidden="true">→</span></button></div>
              {transactions.length === 0 ? <EmptyState icon="＋" title="Tu actividad aparecerá aquí" description="Registra un ingreso, gasto o transferencia para comenzar a ver el pulso de tu dinero." actions={<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button>} /> : <div className="transaction-list compact-list">
-               {transactions.slice(0, 5).map((transaction) => (
+               {transactions.slice(0, 3).map((transaction) => (
                  <button className="transaction-row" type="button" key={transaction.id} aria-label={`Editar movimiento ${transaction.title}`} onClick={() => openTransactionEditor(transaction)}>
                    <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
                    <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}</small></span>
@@ -2154,8 +2163,8 @@ export default function Home() {
         <section id="activity-view" className="view-page activity-view" hidden={activeView !== "activity"}>
           <ViewHeader
             eyebrow="ACTIVIDAD"
-            title="El pulso de tu dinero."
-            description="Registra operaciones reales y planea las que se repiten sin perder el contexto."
+            title="Tus movimientos."
+            description="Registra lo que entró y salió de tus cuentas."
             sectionIndex={2}
             sectionHint="Registra y entiende"
             end={<><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="secondary-button" type="button" onClick={startPlannedMovement}>+ Planear movimiento</button><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Nuevo movimiento</button></>}
@@ -2236,8 +2245,8 @@ export default function Home() {
         <section className="dashboard-grid view-page" hidden={activeView !== "accounts"}>
           <ViewHeader
             eyebrow="CUENTAS"
-            title="Todo en su lugar."
-            description="Una vista limpia de dónde está tu dinero y qué función cumple."
+            title="Dónde está tu dinero."
+            description="Consulta tus cuentas y ajusta sus saldos cuando lo necesites."
             sectionIndex={3}
             sectionHint="Ordena tus saldos"
             className="accounts-view-heading"
@@ -2294,8 +2303,8 @@ export default function Home() {
         <section className="plan-view-header view-page" hidden={activeView !== "plan"}>
           <ViewHeader
             eyebrow="PLAN"
-            title="Decide hoy. Mira más lejos."
-            description="Configura el horizonte, prueba aportaciones opcionales y revisa el resultado."
+            title="Tu futuro estimado."
+            description="Prueba una meta, un tiempo y una aportación."
             sectionIndex={4}
             sectionHint="Prueba tus supuestos"
             end={<><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="primary-button" type="button" onClick={startExtraCreation}>+ Agregar escenario</button></>}
@@ -2315,8 +2324,8 @@ export default function Home() {
 
         <section id="proyeccion" className="section-wrap projection-section view-page" hidden={activeView !== "plan"}>
           <div className="section-heading projection-heading">
-            <div><span className="eyebrow">PROYECCIÓN</span><h2>Crecimiento y poder adquisitivo</h2><p>Compara en una sola vista los valores nominales y lo que realmente representarían en pesos de hoy.</p></div>
-            <div className="projection-controls"><div className="horizon-presets" role="group" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button type="button" className={years === period ? "active" : ""} aria-pressed={years === period} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" role="group" aria-label="Horizonte de proyección"><button type="button" aria-label="Reducir horizonte" disabled={years <= 1} onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite" aria-label={`Horizonte actual: ${years} ${years === 1 ? "año" : "años"}`}><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button type="button" aria-label="Aumentar horizonte" disabled={years >= MAX_YEARS} onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div></div>
+            <div><span className="eyebrow">RESULTADO</span><h2>Dinero final estimado</h2><p>Mira cuánto representarían tus decisiones en pesos de hoy.</p></div>
+            <div className="projection-controls"><div className="horizon-presets" role="group" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button type="button" className={years === period ? "active" : ""} aria-pressed={years === period} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" role="group" aria-label="Horizonte de proyección"><button type="button" aria-label="Reducir horizonte" disabled={years <= 1} onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite" aria-label={`Horizonte actual: ${years} ${years === 1 ? "año" : "años"}`}><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button type="button" aria-label="Aumentar horizonte" disabled={years >= MAX_YEARS} onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div><button type="button" className="secondary-button advanced-plan-toggle" aria-expanded={advancedPlanOpen} onClick={() => setAdvancedPlanOpen((current) => !current)}>{advancedPlanOpen ? "Ocultar ajustes" : "Ajustar cálculos"}</button></div>
           </div>
 
           <div className="panel extras-card compact-simulation" ref={extrasCardRef}>
@@ -2324,7 +2333,7 @@ export default function Home() {
               <button type="button" className="extras-toggle" aria-expanded={extrasOpen} aria-controls="extras-panel" onClick={() => setExtrasOpen((current) => !current)}>
                 <span className="extras-toggle-copy">
                   <span className="eyebrow">SIMULACIÓN</span>
-                  <strong>Escenarios de aportación</strong>
+                  <strong>Aportaciones extra</strong>
                   <small>{extrasSummary}</small>
                 </span>
                 <span className="extras-toggle-icon" aria-hidden="true">{extrasOpen ? "−" : "+"}</span>
@@ -2354,7 +2363,7 @@ export default function Home() {
             )}
           </div>
 
-          <div className="projection-grid">
+          <div className={`projection-grid ${advancedPlanOpen ? "has-advanced-plan" : "simple-plan"}`}>
             <div className="panel projection-card comparison-view">
               <div className="projection-summary-head" role="status" aria-live="polite"><div><span>Neto estimado al final, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>{years} {years === 1 ? "año" : "años"} · después de costos e ISR estimados</small></div><span className="projection-badge success">3 líneas comparables</span></div>
               <div className="projection-interpretation" aria-label="Cómo leer el resultado">
@@ -2382,7 +2391,7 @@ export default function Home() {
               <details className="projection-data"><summary>Ver tabla anual accesible</summary><div><table><caption>Proyección anual en pesos mexicanos</caption><thead><tr><th>Periodo</th><th>Reserva</th><th>Inversión</th><th>Pesos de hoy</th></tr></thead><tbody>{annualProjectionPoints.map((point) => <tr key={point.month}><th>{point.month === 0 ? "Hoy" : formatDurationMonths(point.month)}</th><td>{formatMoney(point.reserve)}</td><td>{formatMoney(point.gbm)}</td><td>{formatMoney(point.realTotal)}</td></tr>)}</tbody></table></div></details>
             </div>
 
-            <aside className="panel assumptions-card">
+            <aside className={`panel assumptions-card ${advancedPlanOpen ? "is-open" : "is-advanced-hidden"}`}>
                <div className="panel-heading compact"><div><span className="eyebrow">ESCENARIO</span><h2>Supuestos</h2></div></div>
                <div className="scenario-presets" role="group" aria-label="Escenarios rápidos"><button type="button" aria-pressed={reserveRate === 5 && gbmRate === 7 && inflationRate === 5} onClick={() => applyScenario("conservative")}>Conservador</button><button type="button" aria-pressed={reserveRate === RESERVE_RETURN && gbmRate === GBM_RETURN && inflationRate === DEFAULT_INFLATION} onClick={() => applyScenario("base")}>Base</button><button type="button" aria-pressed={reserveRate === 8 && gbmRate === 11 && inflationRate === 3.5} onClick={() => applyScenario("optimistic")}>Optimista</button></div>
                <div className="scenario-status" role="status" aria-live="polite"><span><i className="status-dot green" /> Escenario activo</span><strong>{scenarioLabel}</strong><small>{scenarioLabel === "Personalizado" ? "Ajustaste al menos un supuesto manualmente." : "Puedes cambiarlo sin alterar tus cuentas ni movimientos."}</small></div>
@@ -2416,8 +2425,8 @@ export default function Home() {
         <section id="respaldo" className="backup-panel view-page" hidden={activeView !== "data"}>
           <ViewHeader
             eyebrow="DATOS Y PRIVACIDAD"
-            title="Tuyos. Portables. Privados."
-            description="Nexo funciona sin cuentas bancarias conectadas y conserva la información en este navegador."
+            title="Tus datos."
+            description="Descarga o restaura una copia cuando lo necesites."
             sectionIndex={5}
             sectionHint="Protege tus datos"
             className="data-view-heading"
@@ -2430,7 +2439,7 @@ export default function Home() {
           </ContextRail>
           <div className="backup-summary"><span className="backup-summary-copy"><span className="eyebrow">RESPALDO COMPLETO</span><strong>Guardar o restaurar tus datos</strong><small>Excel verificable para conservarlos o moverlos a otro navegador</small></span><span className="backup-summary-action"><Icon name="download" size={22} /></span></div>
           <div className="backup-body" aria-busy={backupBusy}>
-             <div className="backup-copy"><h2 id="backup-title">Una copia clara de tus finanzas</h2><p>Descarga un Excel con tus cuentas, actividad, agenda y proyecciones. Después puedes importarlo para continuar en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> resumen, cuentas, actividad real, movimientos planeados, escenarios y configuración.</p></div>
+             <div className="backup-copy"><h2 id="backup-title">Guarda una copia</h2><p>Descarga tus datos para conservarlos o usarlos en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> cuentas, movimientos, agenda y plan.</p></div>
              <div className="data-safety-summary" aria-label="Estado de conservación de tus datos"><div><i className="status-dot green" /><span><strong>{lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</strong><small>{lastSavedAt ? `Última actualización ${new Date(lastSavedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : "Tus cambios se conservan en este dispositivo"}</small></span></div><span className="data-mode-chip">{modeLabel}</span></div>
              <ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol>
             <div className="backup-actions"><button type="button" className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando Excel…" : "Descargar Excel"}</button><button type="button" className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar Excel</button></div>
@@ -2512,18 +2521,24 @@ export default function Home() {
               <label>Fecha<input type="date" value={transactionDraft.date} onChange={(event) => setTransactionDraft((current) => ({ ...current, date: event.target.value }))} /></label>
               <label>{transactionDraft.kind === "transfer" ? "Desde" : "Cuenta"}<select value={transactionDraft.accountId} onChange={(event) => setTransactionDraft((current) => ({ ...current, accountId: event.target.value, toAccountId: current.toAccountId === event.target.value ? accounts.find((account) => account.id !== event.target.value)?.id ?? null : current.toAccountId }))}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>
               {transactionDraft.kind === "transfer" && <label>Hacia<select value={transactionDraft.toAccountId ?? ""} onChange={(event) => setTransactionDraft((current) => ({ ...current, toAccountId: event.target.value || null }))}><option value="">Selecciona destino</option>{accounts.filter((account) => account.id !== transactionDraft.accountId).map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>}
-              <div className="category-editor-field">
-                <label>Categoría<select aria-label="Categoría del movimiento" value={transactionDraft.category} onChange={(event) => setTransactionDraft((current) => ({ ...current, category: event.target.value }))}>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
-                <button type="button" className="inline-add-button" onClick={openCategoryCreator}>+ Nueva categoría</button>
-                {categoryEditorOpen && <div className="category-creator" aria-label="Crear categoría">
-                  <label>Nombre<input type="text" placeholder="Ej. Mascotas" value={categoryDraftName} onChange={(event) => setCategoryDraftName(event.target.value)} /></label>
-                  <div className="category-icon-picker" role="group" aria-label="Icono de la categoría">{CATEGORY_ICON_OPTIONS.map((option) => <button type="button" key={option.id} className={categoryDraftIcon === option.id ? "active" : ""} aria-label={`Icono ${option.label}`} title={option.label} onClick={() => setCategoryDraftIcon(option.id)}><Icon name={option.id} size={17} /></button>)}</div>
-                  {categoryError && <small className="form-error category-error" role="alert">{categoryError}</small>}
-                  <div className="category-creator-actions"><button type="button" className="secondary-button" onClick={() => setCategoryEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveCategory}>Crear categoría</button></div>
-                </div>}
-              </div>
-              <label className="transaction-note-field">Nota <span className="optional">opcional</span><input type="text" placeholder="Agrega contexto útil" value={transactionDraft.note} onChange={(event) => setTransactionDraft((current) => ({ ...current, note: event.target.value }))} /></label>
             </div>
+
+            <details className="transaction-optional-details">
+              <summary>Agregar detalles <span>opcional</span></summary>
+              <div className="transaction-optional-grid">
+                <div className="category-editor-field">
+                  <label>Categoría<select aria-label="Categoría del movimiento" value={transactionDraft.category} onChange={(event) => setTransactionDraft((current) => ({ ...current, category: event.target.value }))}>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
+                  <button type="button" className="inline-add-button" onClick={openCategoryCreator}>+ Nueva categoría</button>
+                  {categoryEditorOpen && <div className="category-creator" aria-label="Crear categoría">
+                    <label>Nombre<input type="text" placeholder="Ej. Mascotas" value={categoryDraftName} onChange={(event) => setCategoryDraftName(event.target.value)} /></label>
+                    <div className="category-icon-picker" role="group" aria-label="Icono de la categoría">{CATEGORY_ICON_OPTIONS.map((option) => <button type="button" key={option.id} className={categoryDraftIcon === option.id ? "active" : ""} aria-label={`Icono ${option.label}`} title={option.label} onClick={() => setCategoryDraftIcon(option.id)}><Icon name={option.id} size={17} /></button>)}</div>
+                    {categoryError && <small className="form-error category-error" role="alert">{categoryError}</small>}
+                    <div className="category-creator-actions"><button type="button" className="secondary-button" onClick={() => setCategoryEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveCategory}>Crear categoría</button></div>
+                  </div>}
+                </div>
+                <label className="transaction-note-field">Nota <span className="optional">opcional</span><input type="text" placeholder="Agrega contexto útil" value={transactionDraft.note} onChange={(event) => setTransactionDraft((current) => ({ ...current, note: event.target.value }))} /></label>
+              </div>
+            </details>
 
             {transactionError && <p id="transaction-form-error" className="form-error" role="alert">{transactionError}</p>}
             <div className="transaction-preview" aria-label="Vista previa del registro">

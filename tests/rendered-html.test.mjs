@@ -33,14 +33,14 @@ test("server-renders the Nexo financial dashboard", async () => {
   assert.match(html, /<title>Nexo · Tu dinero, en perspectiva<\/title>/i);
   assert.match(html, /<meta[^>]+name="description"[^>]+experiencia financiera clara/i);
   assert.match(html, /<link[^>]+rel="icon"[^>]+href="\/favicon\.svg"/i);
-  assert.match(html, /Tu dinero, en perspectiva\./);
+  assert.match(html, /Tu dinero hoy\./);
   assert.match(html, /Patrimonio total/);
   assert.match(html, /Modo ejemplo/);
   assert.match(html, /Cuenta diaria/);
-  assert.match(html, /Flujo de efectivo/);
-  assert.match(html, /El pulso de tu dinero/);
+  assert.match(html, /Entró y salió/);
+  assert.match(html, /Tus movimientos/);
   assert.match(html, /Reserva/);
-  assert.match(html, /Crecimiento y poder adquisitivo/);
+  assert.match(html, /Dinero final estimado/);
   assert.match(html, /https:\/\/nexo\.test\/og-nexo-2026\.png/i);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/i);
 });

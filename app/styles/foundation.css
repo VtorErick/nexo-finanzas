@@ -1071,6 +1071,224 @@ summary:focus-visible {
   min-width: 40px;
 }
 
+/* Simplified navigation and progressive disclosure */
+.desktop-more-nav,
+.mobile-more-nav,
+.more-nav {
+  position: relative;
+}
+
+.desktop-more-nav {
+  margin-top: 2px;
+}
+
+.more-nav-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 14px;
+  font-weight: 650;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.more-nav-trigger:hover,
+.more-nav-trigger[aria-expanded="true"],
+.more-nav-trigger.active {
+  background: var(--surface-accent);
+  color: var(--accent-strong);
+}
+
+.more-nav-icon {
+  align-items: center;
+  display: inline-flex;
+  font-size: 16px;
+  height: 20px;
+  justify-content: center;
+  letter-spacing: 1px;
+  width: 20px;
+}
+
+.more-nav-menu {
+  background: var(--surface-elevated);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  padding: 7px;
+  position: absolute;
+  z-index: 100;
+}
+
+.desktop-more-nav .more-nav-menu {
+  left: 0;
+  top: calc(100% + 7px);
+}
+
+.more-nav-menu button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  color: var(--ink-soft);
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 9px;
+  min-height: 42px;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.more-nav-menu button:hover,
+.more-nav-menu button.active {
+  background: var(--surface-accent);
+  color: var(--accent-strong);
+}
+
+.more-nav-menu button .icon {
+  flex: 0 0 auto;
+}
+
+.mobile-more-nav {
+  display: none;
+}
+
+.plan-guide,
+.overview-secondary-metric {
+  display: none;
+}
+
+.projection-grid.simple-plan {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.projection-grid.simple-plan .assumptions-card {
+  display: none;
+}
+
+.advanced-plan-toggle {
+  white-space: nowrap;
+}
+
+.transaction-optional-details {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 14px;
+  padding-top: 2px;
+}
+
+.transaction-optional-details summary {
+  align-items: center;
+  color: var(--accent-strong);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 6px;
+  list-style: none;
+  min-height: 42px;
+}
+
+.transaction-optional-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.transaction-optional-details summary::before {
+  content: "+";
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.transaction-optional-details[open] summary::before {
+  content: "−";
+}
+
+.transaction-optional-details summary span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.transaction-optional-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 2px 0 4px;
+}
+
+@media (max-width: 1023px) {
+  .desktop-more-nav {
+    display: none;
+  }
+
+  .mobile-more-nav {
+    display: block;
+    min-width: 0;
+  }
+
+  .tab-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .mobile-more-nav .more-nav-trigger {
+    align-items: center;
+    background: transparent;
+    border-radius: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    font-size: 11px;
+    gap: 4px;
+    justify-content: center;
+    min-height: 56px;
+    padding: 7px 4px;
+    text-align: center;
+  }
+
+  .mobile-more-nav .more-nav-trigger.active,
+  .mobile-more-nav .more-nav-trigger[aria-expanded="true"] {
+    background: var(--surface-accent);
+    color: var(--accent-strong);
+  }
+
+  .mobile-more-nav .more-nav-icon {
+    font-size: 15px;
+    height: 19px;
+  }
+
+  .mobile-more-nav .more-nav-menu {
+    bottom: calc(100% + 10px);
+    right: 0;
+  }
+}
+
+@media (max-width: 699px) {
+  .advanced-plan-toggle {
+    min-height: 42px;
+    width: 100%;
+  }
+
+  .transaction-optional-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-more-nav .more-nav-trigger {
+    font-size: 10px;
+    min-height: 50px;
+  }
+}
+
 @media (max-width: 699px) {
   .metric-card {
     min-height: 114px;

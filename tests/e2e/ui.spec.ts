@@ -11,10 +11,10 @@ test.describe("Nexo UI flows", () => {
 
   test("navigates between views and preserves the browser URL", async ({ page }) => {
     test.skip(test.info().project.name === "mobile-chromium", "La navegación móvil se verifica en el test dedicado.");
-    await expect(page.getByRole("heading", { name: "Tu dinero, en perspectiva." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tu dinero hoy." })).toBeVisible();
 
     await page.goto("/?view=accounts");
-    await expect(page.getByRole("heading", { name: "Todo en su lugar." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dónde está tu dinero." })).toBeVisible();
     await page.goto("/");
     await page.waitForFunction(() => document.querySelector(".side-nav button") && Object.keys(document.querySelector(".side-nav button")!).some((key) => key.startsWith("__reactProps")));
 
@@ -25,7 +25,7 @@ test.describe("Nexo UI flows", () => {
 
     await page.goBack();
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { name: "Tu dinero, en perspectiva." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tu dinero hoy." })).toBeVisible();
 
     await primaryNav.getByRole("button", { name: "Plan" }).click();
     await expect(page).toHaveURL(/\?view=plan$/);
@@ -77,17 +77,18 @@ test.describe("Nexo UI flows", () => {
     await expect(filterPanel).not.toBeVisible();
   });
 
-  test("keeps five clear destinations in the mobile navigation", async ({ page }) => {
+  test("keeps three clear destinations and groups secondary screens", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
 
     const tabBar = page.getByRole("navigation", { name: "Navegación de secciones" });
-    await expect(tabBar.getByRole("button")).toHaveCount(5);
+    await expect(tabBar.getByRole("button")).toHaveCount(4);
     await expect(tabBar).toBeVisible();
 
+    await tabBar.getByRole("button", { name: "Más" }).click();
     await tabBar.getByRole("button", { name: "Datos" }).click();
     await expect(page).toHaveURL(/\?view=data$/);
-    await expect(page.getByRole("heading", { name: "Una copia clara de tus finanzas" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tus datos." })).toBeVisible();
     await expect(page.locator(".backup-flow-steps li")).toHaveCount(3);
   });
 
