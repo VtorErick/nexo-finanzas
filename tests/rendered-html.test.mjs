@@ -73,6 +73,8 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /aria-label="Buscar concepto o categoría"/);
   assert.match(html, /role="slider" aria-label="Explorar periodos de la proyección"/);
   assert.match(html, /Neto estimado al final, en pesos de hoy/);
+  assert.match(html, /aria-label="Sección 1 de 5"/);
+  assert.match(html, /Preparando guardado local/);
 });
 
 test("includes the extended planning controls", async () => {
@@ -155,8 +157,14 @@ test("includes the extended planning controls", async () => {
   assert.match(filterChipsSource, /Filtros activos/);
   assert.match(statusMessageSource, /status-message/);
   assert.match(actionMenuSource, /aria-haspopup="menu"/);
+  assert.match(actionMenuSource, /ArrowDown/);
+  assert.match(actionMenuSource, /focusItem/);
   assert.match(emptyStateSource, /empty-state-actions/);
   assert.match(modalShellSource, /aria-modal="true"/);
+  assert.match(viewHeaderSource, /sectionIndex/);
+  assert.match(metricCardSource, /valueLabel/);
+  assert.match(contextRailSource, /role="region"/);
+  assert.match(source, /Cambios sin guardar/);
   assert.match(source, /className="form-stepper"/);
   assert.match(source, /transactionStep/);
   assert.match(source, /Vista previa del registro/);

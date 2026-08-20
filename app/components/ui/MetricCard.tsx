@@ -4,17 +4,18 @@ type MetricCardProps = {
   label: string;
   value: string;
   detail: string;
+  valueLabel?: string;
   icon?: ReactNode;
   tone?: "reserve" | "cash" | "investment" | "neutral";
   className?: string;
 };
 
-export function MetricCard({ label, value, detail, icon, tone = "neutral", className = "" }: MetricCardProps) {
+export function MetricCard({ label, value, detail, valueLabel, icon, tone = "neutral", className = "" }: MetricCardProps) {
   return (
     <article className={`metric-card metric-card-${tone} ${className}`.trim()}>
       {icon && <span className="metric-card-icon" aria-hidden="true">{icon}</span>}
       <span className="metric-card-label">{label}</span>
-      <strong className="metric-card-value">{value}</strong>
+      <strong className="metric-card-value" aria-label={valueLabel}>{value}</strong>
       <small className="metric-card-detail">{detail}</small>
     </article>
   );

@@ -19,7 +19,14 @@ export function ActionMenu({ label, items }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const firstItemRef = useRef<HTMLButtonElement>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function focusItem(index: number) {
+    const enabledItems = itemRefs.current.filter((item): item is HTMLButtonElement => item !== null && !item.disabled);
+    if (enabledItems.length === 0) return;
+    const nextIndex = (index + enabledItems.length) % enabledItems.length;
+    enabledItems[nextIndex]?.focus();
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -32,12 +39,18 @@ export function ActionMenu({ label, items }: ActionMenuProps) {
         event.preventDefault();
         setOpen(false);
         triggerRef.current?.focus();
+        return;
       }
+      const currentIndex = itemRefs.current.findIndex((item) => item === document.activeElement);
+      if (event.key === "ArrowDown") { event.preventDefault(); focusItem(currentIndex + 1); }
+      if (event.key === "ArrowUp") { event.preventDefault(); focusItem(currentIndex - 1); }
+      if (event.key === "Home") { event.preventDefault(); focusItem(0); }
+      if (event.key === "End") { event.preventDefault(); focusItem(itemRefs.current.length - 1); }
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
-    firstItemRef.current?.focus();
+    focusItem(0);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
@@ -61,7 +74,7 @@ export function ActionMenu({ label, items }: ActionMenuProps) {
         <div className="action-menu-items" role="menu" aria-label={label}>
           {items.map((item, index) => (
             <button
-              ref={index === 0 ? firstItemRef : undefined}
+              ref={(element) => { itemRefs.current[index] = element; }}
               key={item.label}
               type="button"
               role="menuitem"

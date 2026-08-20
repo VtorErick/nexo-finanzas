@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -673,7 +674,8 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
 
 function InfoTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  return <button type="button" className="info-tip" data-open={open ? "true" : "false"} aria-label={`Información: ${text}`} aria-expanded={open} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}><span aria-hidden="true">i</span><span className="info-tip-content" role="tooltip">{text}</span></button>;
+  const tooltipId = `info-tip-${useId().replace(/:/g, "")}`;
+  return <button type="button" className="info-tip" data-open={open ? "true" : "false"} aria-label={`Información: ${text}`} aria-expanded={open} aria-describedby={open ? tooltipId : undefined} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); event.currentTarget.focus(); } }}><span aria-hidden="true">i</span><span id={tooltipId} className="info-tip-content" role="tooltip">{text}</span></button>;
 }
 
 function protectionLabel(scheme: ProtectionScheme) {
@@ -1214,6 +1216,11 @@ export default function Home() {
         ? "Optimista"
         : "Personalizado";
   const transactionStep = transactionDraft.amount <= 0 ? 1 : transactionDraft.title.trim() && transactionDraft.date && transactionDraft.accountId ? 3 : 2;
+  const draftAccountsChanged = useMemo(() => {
+    const cleanAccounts = (items: Account[]) => items.map((account) => ({ id: account.id, label: account.label.trim(), amount: account.amount, rate: account.rate.trim(), group: account.group, note: account.note.trim() }));
+    return JSON.stringify(cleanAccounts(draftAccounts)) !== JSON.stringify(cleanAccounts(accounts))
+      || JSON.stringify([...draftEmergencyIds].sort()) !== JSON.stringify([...emergencyIds].sort());
+  }, [accounts, draftAccounts, draftEmergencyIds, emergencyIds]);
   const viewAnnouncement = {
     overview: "Inicio: resumen de tu dinero y siguiente acción.",
     activity: "Actividad: historial, filtros y movimientos planeados.",
@@ -1221,6 +1228,7 @@ export default function Home() {
     plan: "Plan: proyección, escenarios y supuestos.",
     data: "Datos: respaldo, importación y privacidad local.",
   }[activeView];
+  const saveStatus = !storageReady ? "Preparando guardado local…" : lastSavedAt ? "Guardado local confirmado" : "Guardando cambios…";
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -2068,6 +2076,7 @@ export default function Home() {
         modeLabel={modeLabel}
         modeDescription={modeDescription}
         isExample={dataMode === "example"}
+        saveStatus={saveStatus}
         onBackup={openBackupPanel}
         onNewTransaction={() => openNewTransaction("expense")}
       />
@@ -2081,14 +2090,16 @@ export default function Home() {
             eyebrow={formatHeadingDate(today)}
             title="Tu dinero, en perspectiva."
             description={dataMode === "example" ? "Explora Nexo con información ficticia y reemplázala cuando quieras." : "Lo importante de hoy, sin ruido ni hojas de cálculo."}
+            sectionIndex={1}
+            sectionHint="Revisa primero"
             end={<><span className={`private-pill heading-mode ${dataMode === "example" ? "example" : ""}`}><i /> {modeLabel}</span><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Registrar movimiento</button></>}
           />
 
           <section className="overview-grid" aria-label="Resumen financiero">
             <article className="net-worth-card"><div className="hero-orb orb-one" /><div className="hero-orb orb-two" /><div className="card-label"><span>Patrimonio total</span><span className="soft-badge">{accounts.length} cuentas</span></div><strong className="hero-amount" aria-label={`Patrimonio total ${formatMoney(total)} pesos mexicanos`}>{formatMoney(total)}</strong><div className={`wealth-change ${monthNet >= 0 ? "positive" : "negative"}`}><span aria-hidden="true">{monthNet >= 0 ? "↗" : "↘"}</span><strong>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}</strong><small>flujo neto este mes</small></div><div className="net-worth-foot"><span><i className="status-dot green" /> {dataMode === "example" ? "Datos de ejemplo" : "Saldos al día"}</span><small>MXN · {lastSavedAt ? "guardado automático" : "preparando datos"}</small></div></article>
-            <MetricCard tone="reserve" label="Reserva" value={formatMoney(reserve)} detail={`${reserveProgress}% de la meta de emergencia`} icon={<Icon name="shield" size={19} />} />
-            <MetricCard tone="cash" label="Disponible" value={formatMoney(cash)} detail="Liquidez inmediata · no se proyecta" icon={<Icon name="cash" size={19} />} />
-            <MetricCard tone="investment" label="Inversiones" value={formatMoney(gbm)} detail={`${accounts.filter((account) => account.group === "investment").length} ${accounts.filter((account) => account.group === "investment").length === 1 ? "cuenta" : "cuentas"} · largo plazo`} icon={<Icon name="trend" size={19} />} />
+            <MetricCard tone="reserve" label="Reserva" value={formatMoney(reserve)} valueLabel={`Reserva ${formatMoney(reserve)} pesos mexicanos`} detail={`${reserveProgress}% de la meta de emergencia`} icon={<Icon name="shield" size={19} />} />
+            <MetricCard tone="cash" label="Disponible" value={formatMoney(cash)} valueLabel={`Disponible ${formatMoney(cash)} pesos mexicanos`} detail="Liquidez inmediata · no se proyecta" icon={<Icon name="cash" size={19} />} />
+            <MetricCard tone="investment" label="Inversiones" value={formatMoney(gbm)} valueLabel={`Inversiones ${formatMoney(gbm)} pesos mexicanos`} detail={`${accounts.filter((account) => account.group === "investment").length} ${accounts.filter((account) => account.group === "investment").length === 1 ? "cuenta" : "cuentas"} · largo plazo`} icon={<Icon name="trend" size={19} />} />
           </section>
 
           {dataMode === "example" && <aside className="demo-guide"><span className="demo-guide-mark">N</span><div><strong>Estás viendo una historia de ejemplo</strong><p>Cuando estés listo, crea un espacio limpio y agrega únicamente tus cuentas reales.</p></div><button className="secondary-button" type="button" onClick={startPersonalSetup}>Configurar mis datos</button></aside>}
@@ -2145,6 +2156,8 @@ export default function Home() {
             eyebrow="ACTIVIDAD"
             title="El pulso de tu dinero."
             description="Registra operaciones reales y planea las que se repiten sin perder el contexto."
+            sectionIndex={2}
+            sectionHint="Registra y entiende"
             end={<><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="secondary-button" type="button" onClick={startPlannedMovement}>+ Planear movimiento</button><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Nuevo movimiento</button></>}
           />
 
@@ -2225,6 +2238,8 @@ export default function Home() {
             eyebrow="CUENTAS"
             title="Todo en su lugar."
             description="Una vista limpia de dónde está tu dinero y qué función cumple."
+            sectionIndex={3}
+            sectionHint="Ordena tus saldos"
             className="accounts-view-heading"
             end={<><span className="currency-pill">{accounts.length} cuentas · {formatMoney(total)}</span><button className="primary-button" type="button" onClick={openEditor}>Administrar cuentas</button></>}
           />
@@ -2281,6 +2296,8 @@ export default function Home() {
             eyebrow="PLAN"
             title="Decide hoy. Mira más lejos."
             description="Configura el horizonte, prueba aportaciones opcionales y revisa el resultado."
+            sectionIndex={4}
+            sectionHint="Prueba tus supuestos"
             end={<><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="primary-button" type="button" onClick={startExtraCreation}>+ Agregar escenario</button></>}
           />
           <ContextRail label="Resumen del plan">
@@ -2401,6 +2418,8 @@ export default function Home() {
             eyebrow="DATOS Y PRIVACIDAD"
             title="Tuyos. Portables. Privados."
             description="Nexo funciona sin cuentas bancarias conectadas y conserva la información en este navegador."
+            sectionIndex={5}
+            sectionHint="Protege tus datos"
             className="data-view-heading"
             end={<span className="private-hero-mark"><Icon name="shield" size={24} /> Privacidad local</span>}
           />
@@ -2468,7 +2487,8 @@ export default function Home() {
               <span className={transactionStep === 3 ? "active" : ""} aria-current={transactionStep === 3 ? "step" : undefined}><b>3</b> Confirmar</span>
             </div>
 
-            <div className="transaction-kind-picker" role="group" aria-label="Tipo de movimiento">
+            <fieldset className="transaction-kind-picker">
+              <legend className="sr-only">Tipo de movimiento</legend>
               {(["expense", "income", "transfer"] as const).map((kind) => (
                 <button type="button" key={kind} className={transactionDraft.kind === kind ? `active ${kind}` : ""} aria-pressed={transactionDraft.kind === kind} onClick={() => {
                   const source = accounts.find((account) => account.id === transactionDraft.accountId) ?? accounts[0];
@@ -2483,7 +2503,7 @@ export default function Home() {
                   setTransactionError("");
                 }}><TransactionMark kind={kind} /><span><strong>{kind === "expense" ? "Gasto" : kind === "income" ? "Ingreso" : "Transferencia"}</strong><small>{kind === "expense" ? "Dinero que salió" : kind === "income" ? "Dinero que entró" : "Entre tus cuentas"}</small></span></button>
               ))}
-            </div>
+            </fieldset>
 
             <label className="transaction-amount-field"><span>Monto</span><div className={transactionError ? "has-error" : ""}><b>$</b><input ref={transactionAmountRef} aria-label="Monto del movimiento en pesos mexicanos" aria-invalid={transactionError ? "true" : "false"} aria-describedby={transactionError ? "transaction-form-error transaction-amount-help" : "transaction-amount-help"} autoComplete="off" type="text" inputMode="decimal" placeholder="0.00" value={transactionDraft.amountText} onChange={(event) => { setTransactionDraft((current) => ({ ...current, amountText: event.target.value, amount: parseMoneyInput(event.target.value) })); setTransactionError(""); }} onBlur={() => setTransactionDraft((current) => ({ ...current, amountText: current.amount > 0 ? formatTransactionInput(current.amount) : "" }))} /><em>MXN</em></div><small id="transaction-amount-help" className="amount-field-help">{transactionDraft.kind === "income" ? `Entrará a ${accountLabel(transactionDraft.accountId)}.` : transactionDraft.kind === "transfer" ? `${accountLabel(transactionDraft.accountId)} → ${accountLabel(transactionDraft.toAccountId)}.` : `Saldrá de ${accountLabel(transactionDraft.accountId)}.`}</small></label>
 
@@ -2519,7 +2539,7 @@ export default function Home() {
       {editing && (
         <ModalShell ref={editorModalRef} className="editor-modal" labelledBy="editor-title" describedBy="editor-description" onBackdropClick={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
             <div className="editor-heading"><div><span className="eyebrow">DATOS BASE</span><h2 id="editor-title">Administrar cuentas y saldos</h2><p id="editor-description">Edita nombres, montos, rendimientos y notas. También puedes agregar o eliminar cuentas.</p></div><button type="button" className="close-button" ref={closeEditorButtonRef} onClick={() => setEditing(false)} aria-label="Cerrar editor">×</button></div>
-            <div className="editor-toolbar"><span>{draftAccounts.length} cuentas</span><div>{removedDraftAccount && <button type="button" className="undo-account" onClick={undoDraftAccountRemoval}>Deshacer eliminación</button>}<button type="button" className="secondary-button" onClick={addDraftAccount}>+ Agregar cuenta</button></div></div>
+            <div className="editor-toolbar"><span>{draftAccounts.length} cuentas{draftAccountsChanged && <b className="unsaved-badge">Cambios sin guardar</b>}</span><div>{removedDraftAccount && <button type="button" className="undo-account" onClick={undoDraftAccountRemoval}>Deshacer eliminación</button>}<button type="button" className="secondary-button" onClick={addDraftAccount}>+ Agregar cuenta</button></div></div>
             {accountEditorNotice && <p className="editor-notice" role="status">{accountEditorNotice}</p>}
             <div className="account-manager">
               <nav className="account-selector" aria-label="Seleccionar cuenta para editar">{draftAccounts.map((account) => <button type="button" className={selectedDraftAccountId === account.id ? "active" : ""} aria-current={selectedDraftAccountId === account.id ? "true" : undefined} key={account.id} onClick={() => setSelectedDraftAccountId(account.id)}><span className={`account-monogram ${account.group}`}>{account.label.charAt(0).toUpperCase()}</span><span><strong>{account.label}</strong><small>{formatMoney(account.amount)}</small></span></button>)}</nav>
@@ -2534,7 +2554,7 @@ export default function Home() {
                 <label className="reserve-check"><input type="checkbox" checked={draftEmergencyIds.includes(selectedDraftAccount.id)} onChange={(event) => setDraftEmergencyIds((current) => event.target.checked ? [...new Set([...current, selectedDraftAccount.id])] : current.filter((id) => id !== selectedDraftAccount.id))} /> Incluir en el fondo de emergencia</label>
               </article> : <div className="empty-account-detail"><strong>No hay cuentas</strong><p>Agrega una cuenta para empezar.</p></div>}
             </div>
-            <div className="editor-actions sticky-actions"><span>Revisa una cuenta a la vez. Los cambios se guardan juntos.</span><div><button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveAccounts}>Guardar cambios</button></div></div>
+            <div className="editor-actions sticky-actions"><span>{draftAccountsChanged ? "Hay cambios pendientes. Guárdalos para actualizar tus totales." : "Revisa una cuenta a la vez. Los cambios se guardan juntos."}</span><div><button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary-button" disabled={!draftAccountsChanged} onClick={saveAccounts}>Guardar cambios</button></div></div>
         </ModalShell>
       )}
     </main>

@@ -17,6 +17,7 @@ type PrimaryNavigationProps = {
   modeLabel: string;
   modeDescription: string;
   isExample: boolean;
+  saveStatus?: string;
   onBackup: () => void;
   onNewTransaction: () => void;
 };
@@ -52,6 +53,7 @@ export function PrimaryNavigation({
   modeLabel,
   modeDescription,
   isExample,
+  saveStatus,
   onBackup,
   onNewTransaction,
 }: PrimaryNavigationProps) {
@@ -65,7 +67,7 @@ export function PrimaryNavigation({
           <span className="brand-text">Nexo<small>finanzas personales</small></span>
         </button>
         <nav className="side-nav" aria-label="Navegación principal">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <button
               type="button"
               key={item.id}
@@ -73,7 +75,7 @@ export function PrimaryNavigation({
               aria-current={activeView === item.id ? "page" : undefined}
               onClick={() => onNavigate(item.id)}
             >
-              {item.icon}<span>{item.label}</span>
+              {item.icon}<span className="nav-label">{item.label}</span><span className="nav-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
             </button>
           ))}
         </nav>
@@ -81,6 +83,7 @@ export function PrimaryNavigation({
           <div className="sidebar-status">
             <span className={`private-pill ${isExample ? "example" : ""}`}><i /> {modeLabel}</span>
             <small>{modeDescription}</small>
+            {saveStatus && <span className="save-status"><i className="status-dot green" /> {saveStatus}</span>}
           </div>
           <div className="sidebar-foot-row">
             <ThemeButton theme={theme} icon={themeIcon} onToggle={onToggleTheme} />
