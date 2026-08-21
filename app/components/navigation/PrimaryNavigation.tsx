@@ -45,9 +45,22 @@ function ThemeButton({ theme, icon, compact, onToggle }: { theme: "light" | "dar
 
 function MoreNavigation({ items, activeView, open, onToggle, onNavigate }: { items: PrimaryNavigationItem[]; activeView: string; open: boolean; onToggle: () => void; onNavigate: (view: string) => void }) {
   const active = items.some((item) => item.id === activeView);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (wasOpenRef.current && !open) triggerRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [open]);
+
+  if (items.length === 1) {
+    const item = items[0];
+    return <button type="button" className={`more-nav-direct${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => onNavigate(item.id)}>{item.icon}<span>{item.label}</span></button>;
+  }
+
   return (
     <div className="more-nav">
-      <button type="button" className={`more-nav-trigger${active ? " active" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={onToggle}>
+      <button ref={triggerRef} type="button" className={`more-nav-trigger${active ? " active" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={onToggle}>
         <span className="more-nav-icon" aria-hidden="true">•••</span><span>Más</span>
       </button>
       {open && <div className="more-nav-menu" role="menu" aria-label="Más opciones">
@@ -108,7 +121,7 @@ export function PrimaryNavigation({
           <span className="brand-text">Nexo<small>finanzas personales</small></span>
         </button>
         <nav className="side-nav" aria-label="Navegación principal">
-          {items.map((item, index) => (
+          {items.map((item) => (
             <button
               type="button"
               key={item.id}
@@ -116,7 +129,7 @@ export function PrimaryNavigation({
               aria-current={activeView === item.id ? "page" : undefined}
               onClick={() => onNavigate(item.id)}
             >
-              {item.icon}<span className="nav-label">{item.label}</span><span className="nav-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+              {item.icon}<span className="nav-label">{item.label}</span>
             </button>
           ))}
           <div ref={desktopMoreRef} className="desktop-more-nav"><MoreNavigation items={secondaryItems} activeView={activeView} open={moreOpen} onToggle={() => setMoreOpen((current) => !current)} onNavigate={handleNavigate} /></div>

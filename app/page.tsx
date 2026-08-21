@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { PrimaryNavigation, type PrimaryNavigationItem } from "./components/navigation/PrimaryNavigation";
 import { ContextRail } from "./components/ui/ContextRail";
 import { ActionMenu } from "./components/ui/ActionMenu";
@@ -83,6 +84,28 @@ const APP_VIEWS = ["overview", "activity", "accounts", "plan", "data"] as const 
 
 function isAppView(value: string | null): value is AppView {
   return value !== null && (APP_VIEWS as readonly string[]).includes(value);
+}
+
+function useDisclosureGroups(activeView: AppView) {
+  useEffect(() => {
+    document.querySelectorAll<HTMLDetailsElement>("details[data-disclosure-group]").forEach((details) => {
+      details.open = false;
+    });
+  }, [activeView]);
+
+  useEffect(() => {
+    const closeSiblingDisclosures = (event: Event) => {
+      const opened = event.target as HTMLDetailsElement | null;
+      if (!opened?.matches("details[data-disclosure-group]") || !opened.open) return;
+      const group = opened.dataset.disclosureGroup;
+      if (!group) return;
+      document.querySelectorAll<HTMLDetailsElement>("details[data-disclosure-group]").forEach((details) => {
+        if (details !== opened && details.dataset.disclosureGroup === group) details.open = false;
+      });
+    };
+    document.addEventListener("toggle", closeSiblingDisclosures, true);
+    return () => document.removeEventListener("toggle", closeSiblingDisclosures, true);
+  }, []);
 }
 
 function viewFromLocation(): AppView {
@@ -693,8 +716,49 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
 
 function InfoTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
+  const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const tooltipRef = useRef<HTMLSpanElement>(null);
   const tooltipId = `info-tip-${useId().replace(/:/g, "")}`;
-  return <button type="button" className="info-tip" data-open={open ? "true" : "false"} aria-label={`Información: ${text}`} aria-expanded={open} aria-describedby={open ? tooltipId : undefined} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); event.currentTarget.focus(); } }}><span aria-hidden="true">i</span><span id={tooltipId} className="info-tip-content" role="tooltip">{text}</span></button>;
+
+  useEffect(() => {
+    if (!open) {
+      const frameId = window.requestAnimationFrame(() => setTooltipStyle(undefined));
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
+    const placeTooltip = () => {
+      const button = buttonRef.current;
+      const tooltip = tooltipRef.current;
+      if (!button || !tooltip) return;
+      const buttonRect = button.getBoundingClientRect();
+      const tooltipHeight = tooltip.getBoundingClientRect().height;
+      const width = Math.min(280, Math.max(1, window.innerWidth - 24));
+      const left = Math.min(Math.max(12, buttonRect.right - width), window.innerWidth - width - 12);
+      const below = buttonRect.bottom + 8;
+      const top = below + tooltipHeight <= window.innerHeight - 12
+        ? below
+        : Math.max(12, buttonRect.top - tooltipHeight - 8);
+      setTooltipStyle({ bottom: "auto", display: "block", position: "fixed", top, left, right: "auto", width, maxWidth: "calc(100vw - 24px)" });
+    };
+    const frameId = window.requestAnimationFrame(() => {
+      setTooltipStyle({ bottom: "auto", display: "block", position: "fixed", right: "auto", visibility: "hidden", width: "min(280px, calc(100vw - 24px))" });
+      window.requestAnimationFrame(placeTooltip);
+    });
+    window.addEventListener("resize", placeTooltip);
+    window.addEventListener("scroll", placeTooltip, true);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", placeTooltip);
+      window.removeEventListener("scroll", placeTooltip, true);
+    };
+  }, [open]);
+
+  const tooltip = open ? <span ref={tooltipRef} id={tooltipId} className="info-tip-content" role="tooltip" style={tooltipStyle}>{text}</span> : null;
+  return <>
+    <button ref={buttonRef} type="button" className="info-tip" data-open={open ? "true" : "false"} aria-label={`Información: ${text}`} aria-expanded={open} aria-describedby={open ? tooltipId : undefined} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); event.currentTarget.focus(); } }}><span aria-hidden="true">i</span></button>
+    {tooltip && typeof document !== "undefined" ? createPortal(tooltip, document.body) : null}
+  </>;
 }
 
 function protectionLabel(scheme: ProtectionScheme) {
@@ -715,14 +779,16 @@ function parseReferenceNumber(value: string, fallback: number, minimum: number, 
   return Number.isFinite(numeric) ? Math.min(Math.max(numeric, minimum), maximum) : fallback;
 }
 
-function SavingsOptionsReference() {
+function SavingsOptionsReference({ onOpen }: { onOpen?: () => void }) {
   const [udiText, setUdiText] = useState(String(REFERENCE_SHEET.udiValue));
   const [daysText, setDaysText] = useState(String(REFERENCE_SHEET.days));
+  const [referenceFilter, setReferenceFilter] = useState<"all" | SavingsOption["validationStatus"]>("all");
   const udiValue = parseReferenceNumber(udiText, REFERENCE_SHEET.udiValue, 0.000001, 100);
   const days = Math.round(parseReferenceNumber(daysText, REFERENCE_SHEET.days, 1, 365));
   const validation = calculateReferenceValidation(udiValue, days);
-  const initialOptions = SAVINGS_OPTIONS.filter((option) => option.group === "initial");
-  const otherOptions = SAVINGS_OPTIONS.filter((option) => option.group === "other");
+  const visibleOptions = referenceFilter === "all" ? SAVINGS_OPTIONS : SAVINGS_OPTIONS.filter((option) => option.validationStatus === referenceFilter);
+  const initialOptions = visibleOptions.filter((option) => option.group === "initial");
+  const otherOptions = visibleOptions.filter((option) => option.group === "other");
 
   const renderOption = (option: SavingsOption) => {
     const displayedRate = option.currentRate ?? option.annualRate;
@@ -753,7 +819,7 @@ function SavingsOptionsReference() {
 
   return (
     <section className="panel reference-options-panel">
-      <details>
+      <details data-disclosure-group="plan" onToggle={(event) => { if (event.currentTarget.open) onOpen?.(); }}>
         <summary className="reference-options-summary">
           <span className="reference-summary-copy"><span className="eyebrow">CATÁLOGO DE AHORRO</span><strong>Opciones, tasas y protección</strong><small>{SAVINGS_OPTIONS.length} opciones · datos de la hoja con revisión de fuentes</small></span>
           <span className="reference-summary-mark" aria-hidden="true">+</span>
@@ -768,6 +834,8 @@ function SavingsOptionsReference() {
             <label><span>Plazo de cálculo</span><div className="reference-input"><input type="text" inputMode="numeric" value={daysText} onChange={(event) => setDaysText(event.target.value)} onBlur={() => setDaysText(String(days))} /><b>días</b></div></label>
             <label><span>UDI de referencia <small>editable</small></span><div className="reference-input"><input type="text" inputMode="decimal" value={udiText} onChange={(event) => setUdiText(event.target.value)} onBlur={() => setUdiText(udiValue.toFixed(6))} /><b>MXN</b></div></label>
           </div>
+
+          <div className="reference-status-filters" role="group" aria-label="Filtrar catálogo por estado"><span>Mostrar</span><div>{(["all", "verified", "partial", "review"] as const).map((filter) => <button type="button" key={filter} className={referenceFilter === filter ? "active" : ""} aria-pressed={referenceFilter === filter} onClick={() => setReferenceFilter(filter)}>{filter === "all" ? `Todas (${SAVINGS_OPTIONS.length})` : filter === "verified" ? "Confirmadas" : filter === "partial" ? "Parciales" : "Revisar"}</button>)}</div></div>
 
           <div className="reference-validation-grid" aria-label="Validación de la hoja">
             <article><span>Inversión total</span><strong>{formatMoney(validation.investedTotal)}</strong><small>Suma de las filas iniciales</small></article>
@@ -784,14 +852,15 @@ function SavingsOptionsReference() {
 
           <div className="reference-source-strip"><span>Fuentes marco:</span><a href="https://www.gob.mx/ipab" target="_blank" rel="noreferrer">IPAB</a><a href="https://www.fondodeproteccion.mx/" target="_blank" rel="noreferrer">Fondo de Protección</a><a href="https://www.banxico.org.mx/SieInternet/consultarDirectorioInternetAction.do?accion=consultarCuadro&idCuadro=CP150&sector=8&locale=es" target="_blank" rel="noreferrer">Banxico · UDI</a><span>Revisado 18 ago 2026</span></div>
 
-          <div className="reference-option-group">
+          {visibleOptions.length === 0 && <EmptyState icon="⌕" title="No hay opciones con este estado" description="Elige otro filtro para volver a ver el catálogo." />}
+          {initialOptions.length > 0 && <div className="reference-option-group">
             <div className="reference-group-heading"><div><span className="eyebrow">CAPTURA PRINCIPAL</span><h3>Opciones iniciales</h3></div><span>{initialOptions.length} opciones</span></div>
             <div className="reference-option-grid">{initialOptions.map(renderOption)}</div>
-          </div>
-          <div className="reference-option-group">
+          </div>}
+          {otherOptions.length > 0 && <div className="reference-option-group">
             <div className="reference-group-heading"><div><span className="eyebrow">ALTERNATIVAS</span><h3>Otras opciones</h3></div><span>{otherOptions.length} opciones</span></div>
             <div className="reference-option-grid">{otherOptions.map(renderOption)}</div>
-          </div>
+          </div>}
 
           <p className="reference-maintenance-note">Para actualizar el catálogo de forma permanente, edita únicamente <code>app/lib/savings-options.ts</code>. El UDI también se puede ajustar aquí para recalcular los límites en pesos sin tocar el código.</p>
         </div>
@@ -1125,6 +1194,7 @@ export default function Home() {
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const [activeView, setActiveView] = useState<AppView>("overview");
+  useDisclosureGroups(activeView);
   const [confirmationAction, setConfirmationAction] = useState<ConfirmationAction | null>(null);
   const closeEditorButtonRef = useRef<HTMLButtonElement>(null);
   const closeTransactionButtonRef = useRef<HTMLButtonElement>(null);
@@ -1748,6 +1818,7 @@ export default function Home() {
   }
 
   function addExtra() {
+    setAdvancedPlanOpen(false);
     const id = Math.max(0, ...extras.map((extra) => extra.id)) + 1;
     setExtraDraft({
       id,
@@ -1983,6 +2054,20 @@ export default function Home() {
     setInflationRateText(String(values.inflation));
   }
 
+  function toggleAdvancedPlan() {
+    setAdvancedPlanOpen((current) => {
+      if (!current) setExtrasOpen(false);
+      return !current;
+    });
+  }
+
+  function toggleExtras() {
+    setExtrasOpen((current) => {
+      if (!current) setAdvancedPlanOpen(false);
+      return !current;
+    });
+  }
+
   function openBackupPanel() {
     navigateTo("data");
   }
@@ -2180,8 +2265,24 @@ export default function Home() {
                 const isPast = event.date < todayIso;
                 const isCompleted = event.completedDates.includes(event.date);
                 const requiresDestination = event.kind === "transfer" || event.kind === "contribution";
-                const canApply = event.numericAmount > 0 && Boolean(event.accountId) && (!requiresDestination || Boolean(event.toAccountId && event.toAccountId !== event.accountId));
-                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}><span className={`event-day event-${event.tone}`}>{eventDay}</span><div className="event-copy"><div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div><small>{event.numericAmount > 0 ? formatTransactionMoney(event.numericAmount) : "Sin monto"} · {accountLabel(event.accountId)}{requiresDestination ? ` → ${accountLabel(event.toAccountId)}` : ""}{event.detail ? ` · ${event.detail}` : ""}</small>{event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}</div><div className="event-actions movement-actions"><span className="event-state">{isCompleted ? "Aplicado" : isPast ? "Vencido" : "Pendiente"}</span><button type="button" className="event-primary-action" disabled={!isCompleted && !canApply} onClick={() => toggleOccurrenceCompleted(event)}>{isCompleted ? "Deshacer" : "Aplicar"}</button><ActionMenu label={`Más acciones para ${event.title}`} items={[...(event.recurrence !== "none" && !isPast && !isCompleted ? [{ label: "Omitir", onSelect: () => skipOccurrence(event) }] : []), { label: "Editar", onSelect: () => editEvent(event.sourceId) }, { label: event.recurrence === "none" ? "Eliminar" : "Eliminar serie", danger: true, onSelect: () => removeEventSeries(event.sourceId) }]} /></div></div>;
+                const sourceAccountMissing = !event.accountId || !accounts.some((account) => account.id === event.accountId);
+                const destinationAccountMissing = requiresDestination && (!event.toAccountId || !accounts.some((account) => account.id === event.toAccountId) || event.toAccountId === event.accountId);
+                const needsAccountFix = sourceAccountMissing || destinationAccountMissing;
+                const canApply = event.numericAmount > 0 && !needsAccountFix;
+                return <div className={`event-row movement-row ${isCompleted ? "is-complete" : ""}`} key={event.occurrenceKey}>
+                  <span className={`event-day event-${event.tone}`}>{eventDay}</span>
+                  <div className="event-copy">
+                    <div><strong>{event.title}</strong><span className={`movement-kind kind-${event.kind}`}>{movementKindLabel(event.kind)}</span>{event.recurrence !== "none" && <span className="recurrence-chip">{recurrenceLabel(event.recurrence)}</span>}</div>
+                    <small>{event.numericAmount > 0 ? formatTransactionMoney(event.numericAmount) : "Sin monto"} · {accountLabel(event.accountId)}{requiresDestination ? ` → ${accountLabel(event.toAccountId)}` : ""}{event.detail ? ` · ${event.detail}` : ""}</small>
+                    {needsAccountFix && !isCompleted && <span className="event-account-warning" role="status"><span aria-hidden="true">!</span>{destinationAccountMissing ? "Elige la cuenta de origen y destino" : "Elige la cuenta que afectará"}</span>}
+                    {event.includeInProjection && <span className="projection-impact">Incluido en {event.destination === "gbm" ? "inversión" : "reserva"}</span>}
+                  </div>
+                  <div className="event-actions movement-actions">
+                    <span className="event-state">{isCompleted ? "Aplicado" : isPast ? "Vencido" : "Pendiente"}</span>
+                    <button type="button" className={`event-primary-action${needsAccountFix && !isCompleted ? " needs-fix" : ""}`} disabled={!isCompleted && !canApply && !needsAccountFix} onClick={() => needsAccountFix && !isCompleted ? editEvent(event.sourceId) : toggleOccurrenceCompleted(event)}>{isCompleted ? "Deshacer" : needsAccountFix ? "Asignar cuenta" : "Aplicar"}</button>
+                    <ActionMenu label={`Más acciones para ${event.title}`} items={[...(event.recurrence !== "none" && !isPast && !isCompleted ? [{ label: "Omitir", onSelect: () => skipOccurrence(event) }] : []), { label: "Editar", onSelect: () => editEvent(event.sourceId) }, { label: event.recurrence === "none" ? "Eliminar" : "Eliminar serie", danger: true, onSelect: () => removeEventSeries(event.sourceId) }]} />
+                  </div>
+                </div>;
               })}
             </div>
           </div>
@@ -2268,7 +2369,7 @@ export default function Home() {
           </ContextRail>
 
           <section className="overview-insight-grid">
-            <details className="panel overview-collapsible overview-cashflow">
+            <details data-disclosure-group="overview" className="panel overview-collapsible overview-cashflow">
               <summary className="overview-collapsible-summary">
                 <span><span className="eyebrow">ESTE MES</span><strong>Entró y salió</strong><small>{formatMoney(monthNet)} de flujo neto · resumen mensual</small></span>
                 <span className="overview-collapsible-mark" aria-hidden="true">+</span>
@@ -2301,7 +2402,7 @@ export default function Home() {
             </article>
            </section>
 
-           <details className="panel overview-collapsible recent-panel">
+           <details data-disclosure-group="overview" className="panel overview-collapsible recent-panel">
              <summary className="overview-collapsible-summary">
                <span><span className="eyebrow">RECIENTE</span><strong>Últimos movimientos</strong><small>{transactions.length === 0 ? "Aún no hay actividad" : `${Math.min(transactions.length, 3)} movimientos visibles`}</small></span>
                <span className="overview-collapsible-mark" aria-hidden="true">+</span>
@@ -2335,7 +2436,7 @@ export default function Home() {
             <span>{activityFiltersActive ? "Filtros activos" : "Mostrando el mes seleccionado"}</span>
           </ContextRail>
 
-          <details className="panel activity-summary-collapsible">
+          <details data-disclosure-group="activity" className="panel activity-summary-collapsible">
             <summary className="activity-summary-trigger">
               <span><span className="eyebrow">RESUMEN DEL MES</span><strong>{activityMonthLabel}</strong><small>{activityMonthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(activityMonthNet))} de flujo neto · ver estadísticas y tendencia</small></span>
               <span className="overview-collapsible-mark" aria-hidden="true">+</span>
@@ -2454,7 +2555,7 @@ export default function Home() {
           </div>
 
           <aside className="side-column">
-            <details className="panel goal-card accounts-goal-collapsible">
+            <details data-disclosure-group="accounts" className="panel goal-card accounts-goal-collapsible">
               <summary className="panel-heading compact accounts-goal-summary">
                 <div><span className="eyebrow">OBJETIVO PRINCIPAL</span><h2>Reserva de emergencia</h2><small>{reserveProgress}% completado · {formatMoney(reserve)} de {formatMoney(target)}</small></div>
                 <span className="goal-icon" aria-hidden="true"><Icon name="target" size={21} /></span>
@@ -2462,14 +2563,8 @@ export default function Home() {
               <div className="goal-card-body">
                 <div className="goal-content"><GoalRing progress={reserveProgress} /><div className="goal-copy"><strong>{formatMoney(reserve)}</strong><span>de {formatMoney(target)}</span><small>Te faltan {formatMoney(Math.max(target - reserve, 0))}</small></div></div>
                 <div className="progress-track"><span style={{ width: `${reserveProgress}%` }} /></div>
-                <div className="goal-fields">
-                  <label className="target-field"><span>Gasto esencial mensual <em>no es un ingreso</em></span><div><b>$</b><input aria-label="Gasto esencial mensual para calcular meses de cobertura" aria-describedby="expense-purpose" type="text" inputMode="decimal" value={monthlyExpensesText} onChange={(event) => setMonthlyExpensesText(event.target.value)} onBlur={() => setMonthlyExpensesText(formatNumberInput(monthlyExpenses))} /></div></label>
-                  <p className="field-help" id="expense-purpose">Solo calcula la referencia de 3 a 6 meses y tu cobertura. No se suma al patrimonio ni a la proyección.</p>
-                  <label className="target-field"><span>Tu meta personalizada</span><div><b>$</b><input aria-label="Meta del fondo de emergencia" type="text" inputMode="decimal" value={targetText} onChange={(event) => setTargetText(event.target.value)} onBlur={() => setTargetText(formatNumberInput(target))} /></div></label>
-                </div>
                 <div className="coverage-card"><span>Cobertura actual</span><strong>{coverageMonths === null ? "—" : `${coverageMonths.toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses`}</strong><small>{coverageMonths === null ? "Agrega tu gasto esencial para calcularla." : coverageMonths >= 6 ? "Supera la referencia amplia de 6 meses." : coverageMonths >= 3 ? "Dentro de la referencia habitual de 3 a 6 meses." : "Por debajo de la referencia inicial de 3 meses."}</small></div>
-                <div className="goal-suggestions"><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMin))}>Usar 3 meses</button><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMax))}>Usar 6 meses</button></div>
-                <p className="ideal-note"><strong>Referencia ideal:</strong> entre {formatMoney(recommendedTargetMin)} y {formatMoney(recommendedTargetMax)} según tus gastos actuales. Mantén una meta personalizada si tu situación requiere más cobertura.</p>
+                <div className="accounts-goal-link"><p><strong>Configuración centralizada.</strong> El gasto esencial no es un ingreso: solo calcula tu cobertura. Cambia la meta en Plan para mantener un solo lugar de configuración.</p><button type="button" className="text-button" onClick={() => navigateTo("plan")}>Ajustar meta en Plan <span aria-hidden="true">→</span></button></div>
               </div>
             </details>
 
@@ -2499,12 +2594,12 @@ export default function Home() {
         <section id="proyeccion" className="section-wrap projection-section view-page" hidden={activeView !== "plan"}>
           <div className="section-heading projection-heading">
             <div><span className="eyebrow">RESULTADO</span><h2>Dinero final estimado</h2><p>Mira cuánto representarían tus decisiones en pesos de hoy.</p></div>
-            <div className="projection-controls"><div className="horizon-presets" role="group" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button type="button" className={years === period ? "active" : ""} aria-pressed={years === period} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" role="group" aria-label="Horizonte de proyección"><button type="button" aria-label="Reducir horizonte" disabled={years <= 1} onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite" aria-label={`Horizonte actual: ${years} ${years === 1 ? "año" : "años"}`}><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button type="button" aria-label="Aumentar horizonte" disabled={years >= MAX_YEARS} onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div><button type="button" className="secondary-button advanced-plan-toggle" aria-expanded={advancedPlanOpen} onClick={() => setAdvancedPlanOpen((current) => !current)}>{advancedPlanOpen ? "Ocultar ajustes" : "Ajustar cálculos"}</button></div>
+            <div className="projection-controls"><div className="horizon-presets" role="group" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button type="button" className={years === period ? "active" : ""} aria-pressed={years === period} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" role="group" aria-label="Horizonte de proyección"><button type="button" aria-label="Reducir horizonte" disabled={years <= 1} onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite" aria-label={`Horizonte actual: ${years} ${years === 1 ? "año" : "años"}`}><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button type="button" aria-label="Aumentar horizonte" disabled={years >= MAX_YEARS} onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div><button type="button" className="secondary-button advanced-plan-toggle" aria-expanded={advancedPlanOpen} onClick={toggleAdvancedPlan}>{advancedPlanOpen ? "Ocultar ajustes" : "Ajustar cálculos"}</button></div>
           </div>
 
           <div className="panel extras-card compact-simulation" ref={extrasCardRef}>
             <div className="extras-head">
-              <button type="button" className="extras-toggle" aria-expanded={extrasOpen} aria-controls="extras-panel" onClick={() => setExtrasOpen((current) => !current)}>
+              <button type="button" className="extras-toggle" aria-expanded={extrasOpen} aria-controls="extras-panel" onClick={toggleExtras}>
                 <span className="extras-toggle-copy">
                   <span className="eyebrow">SIMULACIÓN</span>
                   <strong>Aportaciones extra</strong>
@@ -2541,7 +2636,7 @@ export default function Home() {
             <div className="panel projection-card comparison-view">
               <div className="projection-summary-head" role="status" aria-live="polite"><div><span>Neto estimado al final, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>{years} {years === 1 ? "año" : "años"} · después de costos e ISR estimados</small></div><span className="projection-badge success">Resultado principal</span></div>
               <ProjectionChart points={comparisonPoints} goalMonth={projection.goalMonth} years={years} target={target} baseDate={today} />
-              <details className="projection-explanation">
+              <details data-disclosure-group="plan" className="projection-explanation">
                 <summary>Cómo se forma esta cifra <small>Ver comparación, aportaciones y costos</small></summary>
                 <div className="projection-explanation-body">
                   <div className="projection-interpretation" aria-label="Cómo leer el resultado">
@@ -2567,7 +2662,7 @@ export default function Home() {
                 </div>
               </details>
               <p className="chart-note">La línea neta supone una venta al final del horizonte y descuenta comisión de Trading MX e ISR sobre la ganancia. Las tasas son supuestos editables y no constituyen una garantía.</p>
-              <details className="projection-data"><summary>Ver tabla anual accesible</summary><div><table><caption>Proyección anual en pesos mexicanos</caption><thead><tr><th>Periodo</th><th>Reserva</th><th>Inversión</th><th>Pesos de hoy</th></tr></thead><tbody>{annualProjectionPoints.map((point) => <tr key={point.month}><th>{point.month === 0 ? "Hoy" : formatDurationMonths(point.month)}</th><td>{formatMoney(point.reserve)}</td><td>{formatMoney(point.gbm)}</td><td>{formatMoney(point.realTotal)}</td></tr>)}</tbody></table></div></details>
+              <details data-disclosure-group="plan" className="projection-data"><summary>Ver tabla anual accesible</summary><div><table><caption>Proyección anual en pesos mexicanos</caption><thead><tr><th>Periodo</th><th>Reserva</th><th>Inversión</th><th>Pesos de hoy</th></tr></thead><tbody>{annualProjectionPoints.map((point) => <tr key={point.month}><th>{point.month === 0 ? "Hoy" : formatDurationMonths(point.month)}</th><td>{formatMoney(point.reserve)}</td><td>{formatMoney(point.gbm)}</td><td>{formatMoney(point.realTotal)}</td></tr>)}</tbody></table></div></details>
             </div>
 
             <aside className={`panel assumptions-card ${advancedPlanOpen ? "is-open" : "is-advanced-hidden"}`}>
@@ -2577,14 +2672,14 @@ export default function Home() {
               <label className="rate-field"><span className="rate-label">Rendimiento de reserva anual <InfoTip text="Supuesto para la reserva y los instrumentos de corto plazo. Es una estimación, no una tasa garantizada." /></span><span className="rate-input"><input aria-label="Rendimiento de reserva anual" type="text" inputMode="decimal" value={reserveRateText} onChange={(event) => setReserveRateText(event.target.value)} onBlur={() => setReserveRateText(String(reserveRate))} /><b>%</b></span></label>
               <label className="rate-field"><span className="rate-label">Rendimiento estimado de inversión en MXN <InfoTip text="Escenario total que combina el rendimiento de VOO en dólares y el efecto del tipo de cambio expresado en pesos." /></span><span className="rate-input"><input aria-label="Rendimiento estimado de inversión en MXN" type="text" inputMode="decimal" value={gbmRateText} onChange={(event) => setGbmRateText(event.target.value)} onBlur={() => setGbmRateText(String(gbmRate))} /><b>%</b></span></label>
               <label className="rate-field inflation-rate-field"><span className="rate-label">Inflación anual <InfoTip text="Se usa para convertir el resultado nominal a poder adquisitivo en pesos de hoy." /></span><span className="rate-input"><input aria-label="Inflación anual estimada" type="text" inputMode="decimal" value={inflationRateText} onChange={(event) => setInflationRateText(event.target.value)} onBlur={() => setInflationRateText(String(inflationRate))} /><b>%</b></span></label>
-              <details className="projection-settings">
+              <details data-disclosure-group="plan" className="projection-settings">
                 <summary>Costos e impuestos</summary>
                 <div className="goal-fields">
                   <label className="rate-field"><span className="rate-label">Comisión Trading MX <InfoTip text="Costo estimado por operación de compra o venta en Trading MX. Ajusta este valor si tu tarifa cambia." /></span><span className="rate-input"><input aria-label="Comisión de Trading MX" type="text" inputMode="decimal" value={brokerFeeText} onChange={(event) => setBrokerFeeText(event.target.value)} onBlur={() => setBrokerFeeText(String(brokerFee))} /><b>%</b></span></label>
                   <label className="rate-field"><span className="rate-label">ISR estimado sobre ganancia <InfoTip text="Estimación para una venta elegible de VOO en SIC. El tratamiento fiscal individual y los dividendos pueden requerir revisión contable." /></span><span className="rate-input"><input aria-label="ISR estimado sobre ganancia" type="text" inputMode="decimal" value={capitalGainsTaxText} onChange={(event) => setCapitalGainsTaxText(event.target.value)} onBlur={() => setCapitalGainsTaxText(String(capitalGainsTax))} /><b>%</b></span></label>
                 </div>
               </details>
-              <details className="projection-settings">
+              <details data-disclosure-group="plan" className="projection-settings">
                 <summary>Ajustar meta de reserva</summary>
                 <div className="goal-fields">
                   <label className="target-field"><span>Gasto esencial mensual <InfoTip text="Solo calcula una referencia de cobertura de 3 a 6 meses. No se suma al patrimonio ni a la proyección." /></span><div><b>$</b><input aria-label="Gasto esencial mensual para calcular meses de cobertura" type="text" inputMode="decimal" value={monthlyExpensesText} onChange={(event) => setMonthlyExpensesText(event.target.value)} onBlur={() => setMonthlyExpensesText(formatNumberInput(monthlyExpenses))} /></div></label>
@@ -2597,7 +2692,7 @@ export default function Home() {
             </aside>
           </div>
 
-          <SavingsOptionsReference />
+          <SavingsOptionsReference onOpen={() => setAdvancedPlanOpen(false)} />
 
         </section>
 
@@ -2614,7 +2709,7 @@ export default function Home() {
                <div className="backup-copy"><span className="eyebrow">RESPALDO LOCAL</span><h2 id="backup-title">Protege tus datos</h2><p>Descarga un respaldo para conservarlo o restaurarlo en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> cuentas, movimientos, agenda y plan.</p></div>
                <div className="data-safety-summary" aria-label="Estado de conservación de tus datos"><div><i className="status-dot green" /><span><strong>{lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</strong><small>{lastSavedAt ? `Última actualización ${new Date(lastSavedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : "Tus cambios se conservan en este dispositivo"}</small></span></div><span className="data-mode-chip">{modeLabel}</span></div>
              </div>
-            <details className="backup-howto"><summary>Cómo funciona el respaldo <small>Descarga, conserva e importa cuando lo necesites</small></summary><ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol></details>
+            <details data-disclosure-group="data" className="backup-howto"><summary>Cómo funciona el respaldo <small>Descarga, conserva e importa cuando lo necesites</small></summary><ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol></details>
             <div className="backup-actions"><button type="button" className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando respaldo…" : "Descargar respaldo"}</button><button type="button" className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar respaldo</button></div>
           <input ref={backupInputRef} hidden type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" onChange={importBackup} />
             {importPreview && <section className="import-preview" aria-labelledby="import-preview-title"><div><span className="eyebrow">ARCHIVO VALIDADO</span><h3 id="import-preview-title">{importPreview.fileName}</h3><StatusMessage tone="warning" live="off">La importación reemplazará los datos actuales de este navegador.</StatusMessage><span className="import-preview-status"><i className="status-dot green" /> Listo para revisar y confirmar</span></div><div className="import-preview-grid"><span><b>{importPreview.data.accounts.length}</b> cuentas</span><span><b>{importPreview.data.transactions.length}</b> operaciones</span><span><b>{importPreview.data.events.length}</b> movimientos planeados</span><span><b>{importPreview.data.extras.length}</b> escenarios</span></div><div className="import-preview-actions"><button type="button" className="secondary-button" onClick={() => { setImportPreview(null); setBackupStatus("Importación cancelada. Tus datos actuales no cambiaron."); }}>Cancelar</button><button type="button" className="primary-button" onClick={() => applyImportedBackup(importPreview)}>Importar y reemplazar</button></div></section>}
@@ -2624,9 +2719,9 @@ export default function Home() {
             >
               {backupStatus}
             </StatusMessage>}
-            <details className="backup-advanced"><summary>Opciones avanzadas</summary><div className="backup-reset"><div><strong>Restablecer datos de ejemplo</strong><p>Reemplaza la información guardada por cuentas y movimientos ficticios. No modifica los archivos de Excel que ya descargaste.</p></div><button type="button" className="danger-button" disabled={backupBusy} onClick={resetToExampleData}>Restablecer datos</button></div></details>
+            <details data-disclosure-group="data" className="backup-advanced"><summary>Opciones avanzadas</summary><div className="backup-reset"><div><strong>Restablecer datos de ejemplo</strong><p>Reemplaza la información guardada por cuentas y movimientos ficticios. No modifica los archivos de Excel que ya descargaste.</p></div><button type="button" className="danger-button" disabled={backupBusy} onClick={resetToExampleData}>Restablecer datos</button></div></details>
           </div>
-          <details className="data-principles-disclosure">
+          <details data-disclosure-group="data" className="data-principles-disclosure">
             <summary>Privacidad y control de tus datos <small>Sin credenciales bancarias · guardado local</small></summary>
             <div className="data-principles">
               <article><span>01</span><strong>Sin credenciales bancarias</strong><p>No pedimos accesos ni enviamos movimientos a servicios de terceros.</p></article>
@@ -2653,7 +2748,7 @@ export default function Home() {
                 : "El movimiento desaparecerá del historial y los saldos de sus cuentas se ajustarán para revertirlo."}</p>
             </div>
             <div className="confirmation-actions">
-              <button type="button" className="secondary-button" ref={closeConfirmationButtonRef} onClick={() => setConfirmationAction(null)}>Conservar datos</button>
+              <button type="button" className="secondary-button" ref={closeConfirmationButtonRef} onClick={() => setConfirmationAction(null)}>Cancelar</button>
               <button type="button" className="danger-button" onClick={confirmPendingAction}>{confirmationAction.kind === "reset-example" ? "Sí, restablecer" : "Sí, eliminar"}</button>
             </div>
         </ModalShell>
@@ -2699,7 +2794,7 @@ export default function Home() {
               {transactionDraft.kind === "transfer" && <label>Hacia<select value={transactionDraft.toAccountId ?? ""} onChange={(event) => setTransactionDraft((current) => ({ ...current, toAccountId: event.target.value || null }))}><option value="">Selecciona destino</option>{accounts.filter((account) => account.id !== transactionDraft.accountId).map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>}
             </div>
 
-            <details className="transaction-optional-details">
+            <details data-disclosure-group="transaction" className="transaction-optional-details">
               <summary>Agregar detalles <span>opcional</span></summary>
               <div className="transaction-optional-grid">
                 <div className="category-editor-field">
