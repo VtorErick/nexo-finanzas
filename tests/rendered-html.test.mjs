@@ -63,19 +63,19 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /Planear movimiento/);
   assert.match(html, /Abrir respaldo/);
   assert.match(html, /Ajustar meta de reserva/);
-  assert.match(html, /Guardar o restaurar tus datos/);
+  assert.match(html, /Protege tus datos/);
   assert.match(html, /Privacidad local/);
   assert.match(html, /Opciones, tasas y protección/);
   assert.match(html, /UDI de referencia/);
   assert.match(html, /RUTA RÁPIDA/);
-  assert.match(html, /Movimientos por mes/);
+  assert.match(html, /Historial/);
   assert.match(html, /aria-label="Mes en vista"/);
   assert.match(html, /Aplicar/);
   assert.match(html, /Filtrar por categoría/);
   assert.match(html, /aria-label="Buscar concepto o categoría"/);
   assert.match(html, /role="slider" aria-label="Explorar periodos de la proyección"/);
   assert.match(html, /Neto estimado al final, en pesos de hoy/);
-  assert.match(html, /aria-label="Sección 1 de 5"/);
+  assert.doesNotMatch(html, /aria-label="Sección 1 de 5"/);
   assert.match(html, /Preparando guardado local/);
 });
 
@@ -139,7 +139,7 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /const DEFAULT_YEARS = 5/);
   assert.match(source, /const STORAGE_KEY = "nexo-finanzas-demo-v5"/);
   assert.match(source, /dataMode/);
-  assert.match(source, /Descargar Excel/);
+  assert.match(source, /Descargar respaldo/);
   assert.match(source, /captureNexoScreenshots/);
   assert.match(source, /importNexoWorkbook/);
   assert.doesNotMatch(source, /nexo-respaldo-\$\{todayIso\}\.json/);

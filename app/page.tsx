@@ -653,10 +653,10 @@ type IconName = "home" | "wallet" | "calendar" | "trend" | "database" | "sun" | 
 const PRIMARY_NAV_ITEMS: Array<{ id: AppView; label: string; icon: IconName }> = [
   { id: "overview", label: "Hoy", icon: "home" },
   { id: "activity", label: "Actividad", icon: "calendar" },
+  { id: "accounts", label: "Cuentas", icon: "wallet" },
   { id: "plan", label: "Plan", icon: "trend" },
 ];
 const SECONDARY_NAV_ITEMS: Array<{ id: AppView; label: string; icon: IconName }> = [
-  { id: "accounts", label: "Cuentas", icon: "wallet" },
   { id: "data", label: "Datos", icon: "database" },
 ];
 const ICONS: Record<IconName, ReactNode> = {
@@ -810,6 +810,7 @@ function GoalRing({ progress }: { progress: number }) {
 
 type CashflowPoint = { key: string; label: string; income: number; expense: number };
 type TransactionMonthGroup = { key: string; label: string; transactions: Transaction[]; income: number; expense: number };
+type ProjectionLineKey = "reserve" | "gbm" | "realTotal";
 
 function CashflowChart({ data }: { data: CashflowPoint[] }) {
   const maxValue = Math.max(1, ...data.flatMap((point) => [point.income, point.expense]));
@@ -858,8 +859,15 @@ function ProjectionChart({
 }) {
   const [hoveredMonth, setHoveredMonth] = useState<number | null>(null);
   const [frameWidth, setFrameWidth] = useState(920);
+  const [visibleLines, setVisibleLines] = useState<Record<ProjectionLineKey, boolean>>({ reserve: false, gbm: false, realTotal: true });
   const chartFrameRef = useRef<HTMLDivElement>(null);
   const compactChart = frameWidth < 640;
+  const lineDefinitions: Array<{ key: ProjectionLineKey; label: string; lineClass: string }> = [
+    { key: "reserve", label: "Reserva nominal", lineClass: "reserve-line" },
+    { key: "gbm", label: "Inversión nominal", lineClass: "gbm-line" },
+    { key: "realTotal", label: "Neto liquidable en pesos de hoy", lineClass: "real-line" },
+  ];
+  const activeLineKeys = lineDefinitions.filter((line) => visibleLines[line.key]).map((line) => line.key);
   const width = frameWidth;
   const height = compactChart ? 240 : 310;
   const padding = compactChart
@@ -867,7 +875,7 @@ function ProjectionChart({
     : { top: 22, right: 18, bottom: 38, left: 62 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const maxValue = Math.max(...points.map((point) => Math.max(point.reserve, point.gbm, point.realTotal)));
+  const maxValue = Math.max(1, ...points.map((point) => Math.max(...activeLineKeys.map((key) => point[key]))));
   const scaleStep = maxValue > 500000 ? 100000 : 50000;
   const maxY = Math.max(target * 1.15, scaleStep, Math.ceil(maxValue / scaleStep) * scaleStep);
   const x = (month: number) => padding.left + (month / (points.length - 1)) * chartWidth;
@@ -924,12 +932,15 @@ function ProjectionChart({
     ? `${hoveredPoint.month === 0 ? "Hoy" : monthLabelForIndex(hoveredPoint.month, baseDate)}: reserva ${formatMoney(hoveredPoint.reserve)}, inversión ${formatMoney(hoveredPoint.gbm)}, pesos de hoy ${formatMoney(hoveredPoint.realTotal)}`
     : "Usa las flechas izquierda y derecha para revisar cada periodo de la proyección.";
 
+  function toggleLine(key: ProjectionLineKey) {
+    if (visibleLines[key] && activeLineKeys.length === 1) return;
+    setVisibleLines((current) => ({ ...current, [key]: !current[key] }));
+  }
+
   return (
     <div className="chart-shell">
-      <div className="chart-legend">
-        <span><i className="legend-line reserve-line" /><span>Reserva nominal<b>{formatMoney(points.at(-1)!.reserve)}</b></span></span>
-        <span><i className="legend-line gbm-line" /><span>Inversión nominal<b>{formatMoney(points.at(-1)!.gbm)}</b></span></span>
-        <span><i className="legend-line real-line" /><span>Neto liquidable en pesos de hoy<b>{formatMoney(points.at(-1)!.realTotal)}</b></span></span>
+      <div className="chart-legend" aria-label="Líneas visibles de la proyección">
+        {lineDefinitions.map((line) => <button type="button" key={line.key} className={`chart-legend-toggle${visibleLines[line.key] ? " is-active" : ""}`} aria-pressed={visibleLines[line.key]} onClick={() => toggleLine(line.key)}><i className={`legend-line ${line.lineClass}`} /><span>{line.label}<b>{formatMoney(points.at(-1)![line.key])}</b></span></button>)}
         {goalMonth && <span><i className="legend-marker" /> Meta en {formatDurationMonths(goalMonth)}</span>}
       </div>
       <div className="chart-frame" ref={chartFrameRef}>
@@ -946,19 +957,19 @@ function ProjectionChart({
             })}
             {xLabels}
           </g>
-          <path className="chart-area real-area" d={`${pathFor("realTotal")} L ${x(points.at(-1)!.month)} ${y(0)} L ${x(0)} ${y(0)} Z`} />
+          {visibleLines.realTotal && <path className="chart-area real-area" d={`${pathFor("realTotal")} L ${x(points.at(-1)!.month)} ${y(0)} L ${x(0)} ${y(0)} Z`} />}
           <line className="target-line" x1={padding.left} x2={width - padding.right} y1={y(target)} y2={y(target)} />
           <text className="target-label" x={width - padding.right} y={y(target) - 8} textAnchor="end">Meta {formatCompact(target)}</text>
           {goalMonth && <line className="goal-line" x1={x(goalMonth)} x2={x(goalMonth)} y1={padding.top} y2={height - padding.bottom} />}
-          <path className="chart-line reserve-stroke" d={pathFor("reserve")} />
-          <path className="chart-line gbm-stroke" d={pathFor("gbm")} />
-          <path className="chart-line real-stroke" d={pathFor("realTotal")} />
+          {visibleLines.reserve && <path className="chart-line reserve-stroke" d={pathFor("reserve")} />}
+          {visibleLines.gbm && <path className="chart-line gbm-stroke" d={pathFor("gbm")} />}
+          {visibleLines.realTotal && <path className="chart-line real-stroke" d={pathFor("realTotal")} />}
           {hoveredPoint && (
             <g className="hover-point" aria-hidden="true">
               <line x1={x(hoveredPoint.month)} x2={x(hoveredPoint.month)} y1={padding.top} y2={height - padding.bottom} />
-              <circle className="marker-reserve" cx={x(hoveredPoint.month)} cy={y(hoveredPoint.reserve)} r="5" />
-              <rect className="marker-investment" x={x(hoveredPoint.month) - 5} y={y(hoveredPoint.gbm) - 5} width="10" height="10" rx="1" />
-              <rect className="marker-real" x={x(hoveredPoint.month) - 4.5} y={y(hoveredPoint.realTotal) - 4.5} width="9" height="9" transform={`rotate(45 ${x(hoveredPoint.month)} ${y(hoveredPoint.realTotal)})`} />
+              {visibleLines.reserve && <circle className="marker-reserve" cx={x(hoveredPoint.month)} cy={y(hoveredPoint.reserve)} r="5" />}
+              {visibleLines.gbm && <rect className="marker-investment" x={x(hoveredPoint.month) - 5} y={y(hoveredPoint.gbm) - 5} width="10" height="10" rx="1" />}
+              {visibleLines.realTotal && <rect className="marker-real" x={x(hoveredPoint.month) - 4.5} y={y(hoveredPoint.realTotal) - 4.5} width="9" height="9" transform={`rotate(45 ${x(hoveredPoint.month)} ${y(hoveredPoint.realTotal)})`} />}
             </g>
           )}
           <rect className="chart-hitbox" x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} tabIndex={0} role="slider" aria-label="Explorar periodos de la proyección" aria-valuemin={0} aria-valuemax={points.length - 1} aria-valuenow={hoveredMonth ?? 0} aria-valuetext={chartValueText} onKeyDown={handleKeyDown} onPointerMove={handleMove} onPointerDown={handleMove} onPointerLeave={handleLeave} onContextMenu={(event) => event.preventDefault()} />
@@ -966,9 +977,9 @@ function ProjectionChart({
         {!compactChart && hoveredPoint && (
           <div className="chart-tooltip" style={{ left: `${(x(hoveredPoint.month) / width) * 100}%` }}>
             <b>{hoveredPoint.month === 0 ? "Hoy" : monthLabelForIndex(hoveredPoint.month, baseDate)}</b>
-            <span><i className="tooltip-dot reserve" /> Reserva nominal {formatMoney(hoveredPoint.reserve)}</span>
-            <span><i className="tooltip-dot investment" /> Inversión nominal {formatMoney(hoveredPoint.gbm)}</span>
-            <span><i className="tooltip-dot real" /> Neto liquidable en pesos de hoy {formatMoney(hoveredPoint.realTotal)}</span>
+            {visibleLines.reserve && <span><i className="tooltip-dot reserve" /> Reserva nominal {formatMoney(hoveredPoint.reserve)}</span>}
+            {visibleLines.gbm && <span><i className="tooltip-dot investment" /> Inversión nominal {formatMoney(hoveredPoint.gbm)}</span>}
+            {visibleLines.realTotal && <span><i className="tooltip-dot real" /> Neto liquidable en pesos de hoy {formatMoney(hoveredPoint.realTotal)}</span>}
             <small>Total antes de salida {formatMoney(hoveredPoint.reserve + hoveredPoint.gbm)}</small>
           </div>
         )}
@@ -981,9 +992,9 @@ function ProjectionChart({
                   <button type="button" className="chart-readout-close" aria-label="Cerrar el detalle del punto" onClick={() => setHoveredMonth(null)}>×</button>
                 </div>
                 <div className="chart-readout-grid">
-                  <span><i className="tooltip-dot reserve" />Reserva<b>{formatMoney(hoveredPoint.reserve)}</b></span>
-                  <span><i className="tooltip-dot investment" />Inversión<b>{formatMoney(hoveredPoint.gbm)}</b></span>
-                  <span><i className="tooltip-dot real" />Pesos de hoy<b>{formatMoney(hoveredPoint.realTotal)}</b></span>
+                  {visibleLines.reserve && <span><i className="tooltip-dot reserve" />Reserva<b>{formatMoney(hoveredPoint.reserve)}</b></span>}
+                  {visibleLines.gbm && <span><i className="tooltip-dot investment" />Inversión<b>{formatMoney(hoveredPoint.gbm)}</b></span>}
+                  {visibleLines.realTotal && <span><i className="tooltip-dot real" />Pesos de hoy<b>{formatMoney(hoveredPoint.realTotal)}</b></span>}
                 </div>
                 <small className="chart-readout-total">Total antes de salida {formatMoney(hoveredPoint.reserve + hoveredPoint.gbm)}</small>
               </>
@@ -2236,16 +2247,16 @@ export default function Home() {
             eyebrow={formatHeadingDate(today)}
             title="Tu dinero hoy."
             description={dataMode === "example" ? "Explora con datos ficticios y reemplázalos cuando quieras." : "Mira lo importante y decide qué hacer después."}
-            sectionIndex={1}
-            sectionHint="Revisa primero"
             end={<><span className={`private-pill heading-mode ${dataMode === "example" ? "example" : ""}`}><i /> {modeLabel}</span><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Registrar movimiento</button></>}
           />
 
           <section className="overview-grid" aria-label="Resumen financiero">
             <article className="net-worth-card"><div className="hero-orb orb-one" /><div className="hero-orb orb-two" /><div className="card-label"><span>Patrimonio total</span><span className="soft-badge">{accounts.length} cuentas</span></div><strong className="hero-amount" aria-label={`Patrimonio total ${formatMoney(total)} pesos mexicanos`}>{formatMoney(total)}</strong><div className={`wealth-change ${monthNet >= 0 ? "positive" : "negative"}`}><span aria-hidden="true">{monthNet >= 0 ? "↗" : "↘"}</span><strong>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}</strong><small>flujo neto este mes</small></div><div className="net-worth-foot"><span><i className="status-dot green" /> {dataMode === "example" ? "Datos de ejemplo" : "Saldos al día"}</span><small>MXN · {lastSavedAt ? "guardado automático" : "preparando datos"}</small></div></article>
-            <MetricCard tone="reserve" label="Reserva" value={formatMoney(reserve)} valueLabel={`Reserva ${formatMoney(reserve)} pesos mexicanos`} detail={`${reserveProgress}% de la meta de emergencia`} icon={<Icon name="shield" size={19} />} />
-            <MetricCard tone="cash" label="Disponible" value={formatMoney(cash)} valueLabel={`Disponible ${formatMoney(cash)} pesos mexicanos`} detail="Liquidez inmediata · no se proyecta" icon={<Icon name="cash" size={19} />} />
-            <MetricCard tone="investment" label="Inversiones" value={formatMoney(gbm)} valueLabel={`Inversiones ${formatMoney(gbm)} pesos mexicanos`} detail={`${accounts.filter((account) => account.group === "investment").length} ${accounts.filter((account) => account.group === "investment").length === 1 ? "cuenta" : "cuentas"} · largo plazo`} icon={<Icon name="trend" size={19} />} />
+            <div className="overview-money-facts" aria-label="Resumen de saldos">
+              <MetricCard tone="reserve" label="Reserva" value={formatMoney(reserve)} valueLabel={`Reserva ${formatMoney(reserve)} pesos mexicanos`} detail={`${reserveProgress}% de la meta de emergencia`} icon={<Icon name="shield" size={19} />} />
+              <MetricCard tone="cash" label="Disponible" value={formatMoney(cash)} valueLabel={`Disponible ${formatMoney(cash)} pesos mexicanos`} detail="Liquidez inmediata · no se proyecta" icon={<Icon name="cash" size={19} />} />
+              <MetricCard tone="investment" label="Inversiones" value={formatMoney(gbm)} valueLabel={`Inversiones ${formatMoney(gbm)} pesos mexicanos`} detail={`${accounts.filter((account) => account.group === "investment").length} ${accounts.filter((account) => account.group === "investment").length === 1 ? "cuenta" : "cuentas"} · largo plazo`} icon={<Icon name="trend" size={19} />} />
+            </div>
           </section>
 
           {dataMode === "example" && <aside className="demo-guide"><span className="demo-guide-mark">N</span><div><strong>Estás viendo una historia de ejemplo</strong><p>Cuando estés listo, crea un espacio limpio y agrega únicamente tus cuentas reales.</p></div><button className="secondary-button" type="button" onClick={startPersonalSetup}>Configurar mis datos</button></aside>}
@@ -2316,15 +2327,12 @@ export default function Home() {
             eyebrow="ACTIVIDAD"
             title="Tus movimientos."
             description="Registra lo que entró y salió de tus cuentas."
-            sectionIndex={2}
-            sectionHint="Registra y entiende"
-            end={<><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="secondary-button" type="button" onClick={startPlannedMovement}>+ Planear movimiento</button><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Nuevo movimiento</button></>}
+            end={<><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="text-button activity-plan-link" type="button" onClick={startPlannedMovement}>Planear movimiento</button><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Registrar movimiento</button></>}
           />
 
           <ContextRail label="Estado de actividad">
             <span><i className="status-dot green" /> {activityMonthTransactions.length} movimientos en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span>
             <span>{activityFiltersActive ? "Filtros activos" : "Mostrando el mes seleccionado"}</span>
-            <span className="context-rail-hint">Los traspasos no alteran tu flujo neto.</span>
           </ContextRail>
 
           <details className="panel activity-summary-collapsible">
@@ -2347,7 +2355,7 @@ export default function Home() {
           </details>
 
           <section className="panel ledger-card">
-            <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Movimientos por mes</h2><p>Encuentra una operación por tipo, categoría o concepto.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
+            <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Historial</h2><p>Elige un mes y encuentra una operación cuando la necesites.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
             <div className="activity-month-selector" aria-label="Cambiar mes en vista">
               <button type="button" className="month-step-button" aria-label="Mes anterior" disabled={visibleActivityMonth <= (activityMonthOptions.at(-1) ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, -1))}>‹</button>
               <label><span className="sr-only">Mes en vista</span><select aria-label="Mes en vista" value={visibleActivityMonth} onChange={(event) => setActivityMonth(event.target.value)}>{activityMonthOptions.map((month) => <option key={month} value={month}>{formatMonthGroupLabel(month)}</option>)}</select></label>
@@ -2412,8 +2420,6 @@ export default function Home() {
             eyebrow="CUENTAS"
             title="Dónde está tu dinero."
             description="Consulta tus cuentas y ajusta sus saldos cuando lo necesites."
-            sectionIndex={3}
-            sectionHint="Ordena tus saldos"
             className="accounts-view-heading"
             end={<><span className="currency-pill">{accounts.length} cuentas · {formatMoney(total)}</span><button className="primary-button" type="button" onClick={openEditor}>Administrar cuentas</button></>}
           />
@@ -2424,7 +2430,7 @@ export default function Home() {
           </ContextRail>
           <div className="main-column">
             <section id="cuentas" className="panel accounts-panel">
-              <div className="panel-heading"><div><span className="eyebrow">DISTRIBUCIÓN</span><h2>Tus cuentas</h2><p>Los saldos cambian automáticamente al registrar operaciones.</p></div><button type="button" className="text-button" onClick={openEditor}>Editar saldos <span aria-hidden="true">→</span></button></div>
+              <div className="panel-heading"><div><span className="eyebrow">SALDOS</span><h2>Tus saldos</h2><p>Consulta dónde está tu dinero; los saldos se actualizan al registrar operaciones.</p></div><button type="button" className="text-button" onClick={openEditor}>Editar saldos <span aria-hidden="true">→</span></button></div>
               <div className="allocation-strip" role="img" aria-label={`Distribución del patrimonio: ${allocation.map((item) => `${item.label} ${formatMoney(item.value)}`).join(", ")}`}>{allocation.filter((item) => item.value > 0).map((item) => <span key={item.key} style={{ width: `${(item.value / Math.max(total, 1)) * 100}%`, background: item.color }} title={`${item.label}: ${formatMoney(item.value)}`} />)}</div>
               <div className="allocation-legend" aria-label="Leyenda de distribución">{allocation.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label}<strong>{formatMoney(item.value)} · {total > 0 ? `${Math.round((item.value / total) * 100)}%` : "0%"}</strong></span>)}</div>
               <div className="account-table" role="table" aria-label="Cuentas y saldos">
@@ -2475,9 +2481,7 @@ export default function Home() {
             eyebrow="PLAN"
             title="Tu futuro estimado."
             description="Prueba una meta, un tiempo y una aportación."
-            sectionIndex={4}
-            sectionHint="Prueba tus supuestos"
-            end={<><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="primary-button" type="button" onClick={startExtraCreation}>+ Agregar escenario</button></>}
+            end={<><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="secondary-button plan-add-scenario" type="button" onClick={startExtraCreation}>Agregar escenario</button></>}
           />
           <ContextRail label="Resumen del plan">
             <span><i className="status-dot green" /> Proyección actualizada</span>
@@ -2535,7 +2539,7 @@ export default function Home() {
 
           <div className={`projection-grid ${advancedPlanOpen ? "has-advanced-plan" : "simple-plan"}`}>
             <div className="panel projection-card comparison-view">
-              <div className="projection-summary-head" role="status" aria-live="polite"><div><span>Neto estimado al final, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>{years} {years === 1 ? "año" : "años"} · después de costos e ISR estimados</small></div><span className="projection-badge success">3 líneas comparables</span></div>
+              <div className="projection-summary-head" role="status" aria-live="polite"><div><span>Neto estimado al final, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>{years} {years === 1 ? "año" : "años"} · después de costos e ISR estimados</small></div><span className="projection-badge success">Resultado principal</span></div>
               <ProjectionChart points={comparisonPoints} goalMonth={projection.goalMonth} years={years} target={target} baseDate={today} />
               <details className="projection-explanation">
                 <summary>Cómo se forma esta cifra <small>Ver comparación, aportaciones y costos</small></summary>
@@ -2602,28 +2606,24 @@ export default function Home() {
             eyebrow="DATOS Y PRIVACIDAD"
             title="Tus datos."
             description="Descarga o restaura una copia cuando lo necesites."
-            sectionIndex={5}
-            sectionHint="Protege tus datos"
             className="data-view-heading"
             end={<span className="private-hero-mark"><Icon name="shield" size={24} /> Privacidad local</span>}
           />
-          <ContextRail label="Estado de tus datos">
-            <span><i className="status-dot green" /> {lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</span>
-          </ContextRail>
-          <div className="backup-summary"><span className="backup-summary-copy"><span className="eyebrow">RESPALDO COMPLETO</span><strong>Guardar o restaurar tus datos</strong><small>Excel verificable para conservarlos o moverlos a otro navegador</small></span><span className="backup-summary-action"><Icon name="download" size={22} /></span></div>
           <div className="backup-body" aria-busy={backupBusy}>
-             <div className="backup-copy"><h2 id="backup-title">Guarda una copia</h2><p>Descarga tus datos para conservarlos o usarlos en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> cuentas, movimientos, agenda y plan.</p></div>
-             <div className="data-safety-summary" aria-label="Estado de conservación de tus datos"><div><i className="status-dot green" /><span><strong>{lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</strong><small>{lastSavedAt ? `Última actualización ${new Date(lastSavedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : "Tus cambios se conservan en este dispositivo"}</small></span></div><span className="data-mode-chip">{modeLabel}</span></div>
+             <div className="backup-lead">
+               <div className="backup-copy"><span className="eyebrow">RESPALDO LOCAL</span><h2 id="backup-title">Protege tus datos</h2><p>Descarga un respaldo para conservarlo o restaurarlo en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> cuentas, movimientos, agenda y plan.</p></div>
+               <div className="data-safety-summary" aria-label="Estado de conservación de tus datos"><div><i className="status-dot green" /><span><strong>{lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</strong><small>{lastSavedAt ? `Última actualización ${new Date(lastSavedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : "Tus cambios se conservan en este dispositivo"}</small></span></div><span className="data-mode-chip">{modeLabel}</span></div>
+             </div>
             <details className="backup-howto"><summary>Cómo funciona el respaldo <small>Descarga, conserva e importa cuando lo necesites</small></summary><ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol></details>
-            <div className="backup-actions"><button type="button" className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando Excel…" : "Descargar Excel"}</button><button type="button" className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar Excel</button></div>
+            <div className="backup-actions"><button type="button" className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando respaldo…" : "Descargar respaldo"}</button><button type="button" className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar respaldo</button></div>
           <input ref={backupInputRef} hidden type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" onChange={importBackup} />
             {importPreview && <section className="import-preview" aria-labelledby="import-preview-title"><div><span className="eyebrow">ARCHIVO VALIDADO</span><h3 id="import-preview-title">{importPreview.fileName}</h3><StatusMessage tone="warning" live="off">La importación reemplazará los datos actuales de este navegador.</StatusMessage><span className="import-preview-status"><i className="status-dot green" /> Listo para revisar y confirmar</span></div><div className="import-preview-grid"><span><b>{importPreview.data.accounts.length}</b> cuentas</span><span><b>{importPreview.data.transactions.length}</b> operaciones</span><span><b>{importPreview.data.events.length}</b> movimientos planeados</span><span><b>{importPreview.data.extras.length}</b> escenarios</span></div><div className="import-preview-actions"><button type="button" className="secondary-button" onClick={() => { setImportPreview(null); setBackupStatus("Importación cancelada. Tus datos actuales no cambiaron."); }}>Cancelar</button><button type="button" className="primary-button" onClick={() => applyImportedBackup(importPreview)}>Importar y reemplazar</button></div></section>}
-            <StatusMessage
-              tone={backupStatus.toLocaleLowerCase("es-MX").includes("no se pudo") || backupStatus.toLocaleLowerCase("es-MX").includes("bloqueó") ? "warning" : backupStatus ? "success" : "info"}
-              title={backupStatus ? "Estado del respaldo" : undefined}
+            {backupStatus && <StatusMessage
+              tone={backupStatus.toLocaleLowerCase("es-MX").includes("no se pudo") || backupStatus.toLocaleLowerCase("es-MX").includes("bloqueó") ? "warning" : "success"}
+              title="Estado del respaldo"
             >
-              {backupStatus || (lastSavedAt ? `Último guardado local: ${new Date(lastSavedAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}` : "Tus cambios se guardarán automáticamente en este dispositivo.")}
-            </StatusMessage>
+              {backupStatus}
+            </StatusMessage>}
             <details className="backup-advanced"><summary>Opciones avanzadas</summary><div className="backup-reset"><div><strong>Restablecer datos de ejemplo</strong><p>Reemplaza la información guardada por cuentas y movimientos ficticios. No modifica los archivos de Excel que ya descargaste.</p></div><button type="button" className="danger-button" disabled={backupBusy} onClick={resetToExampleData}>Restablecer datos</button></div></details>
           </div>
           <details className="data-principles-disclosure">

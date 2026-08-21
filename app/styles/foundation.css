@@ -221,6 +221,251 @@ textarea:disabled {
   }
 }
 
+/* Fase 2 · Hoy: el patrimonio responde primero y los saldos se leen como
+   un bloque compacto, no como tres tarjetas verticales independientes. */
+.overview-money-facts {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.overview-money-facts .metric-card {
+  min-height: 178px;
+}
+
+@media (max-width: 699px) {
+  .overview-money-facts {
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-money-facts .metric-card {
+    min-height: 104px;
+    padding: 14px;
+  }
+
+  .overview-money-facts .metric-card .metric-card-icon {
+    height: 32px;
+    width: 32px;
+  }
+
+  .overview-money-facts .metric-card .metric-card-value {
+    font-size: clamp(18px, 5vw, 24px);
+  }
+
+  .overview-money-facts .metric-card .metric-card-detail {
+    font-size: 10.5px;
+  }
+}
+
+@media (max-width: 360px) {
+  .overview-money-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Datos · una sola tarjeta explica el estado y las acciones. El procedimiento
+   y las garantías se mantienen disponibles, pero no ocupan la primera lectura. */
+.backup-lead {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.7fr);
+}
+
+.backup-lead .backup-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.backup-lead .backup-copy .eyebrow {
+  margin: 0;
+}
+
+.backup-lead .backup-copy h2 {
+  margin: 0 0 2px;
+}
+
+.backup-lead .backup-copy p {
+  margin: 0;
+}
+
+.backup-lead .data-safety-summary {
+  align-self: stretch;
+  margin: 0;
+}
+
+@media (max-width: 699px) {
+  .backup-lead {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Plan · la gráfica cuenta una historia simple por defecto. Las líneas
+   comparables se activan desde la leyenda, sin cargar la primera lectura. */
+.chart-legend-toggle {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.chart-legend-toggle:hover,
+.chart-legend-toggle:focus-visible,
+.chart-legend-toggle.is-active {
+  background: var(--surface-accent);
+  border-color: var(--accent-soft);
+  color: var(--ink);
+}
+
+.chart-legend-toggle:not(.is-active) {
+  opacity: 0.62;
+}
+
+.chart-legend-toggle > span {
+  display: grid;
+  gap: 1px;
+}
+
+.chart-legend-toggle b {
+  color: var(--ink);
+  font-family: var(--font-num);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+@media (max-width: 699px) {
+  .chart-legend-toggle {
+    min-height: 42px;
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+}
+
+@media (max-width: 1023px) {
+  /* En móvil Cuentas responde primero "¿cuánto tengo?"; la configuración de
+     la meta aparece después, sin competir con la consulta de saldos. */
+  .dashboard-grid .main-column {
+    grid-row: 2;
+  }
+
+  .dashboard-grid .side-column {
+    grid-row: 3;
+  }
+}
+
+/* Actividad · la acción principal es registrar; planear queda disponible sin
+   competir con el historial. El mes seleccionado permanece visible al bajar. */
+.activity-plan-link {
+  color: var(--accent-strong);
+  min-height: 36px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+@media (max-width: 699px) {
+  .activity-plan-link {
+    align-self: flex-start;
+    justify-self: start;
+    min-height: 36px;
+    width: auto !important;
+  }
+
+  .activity-month-selector {
+    position: sticky;
+    top: 62px;
+    z-index: 8;
+  }
+}
+
+@media (max-width: 699px) {
+  /* El encabezado ya es sticky; 82 px adicionales dejaban el tercer saldo
+     debajo de la navegación fija en el primer viewport. */
+  .page-wrap {
+    padding-top: 38px;
+  }
+}
+
+/* En teléfonos normales los tres saldos forman una sola lectura horizontal.
+   Se quita el icono grande de la ecuación espacial, pero se conserva el color
+   semántico y el texto completo; en 360 px o menos se apilan de nuevo. */
+@media (min-width: 361px) and (max-width: 699px) {
+  .overview-money-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-money-facts .metric-card {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 116px;
+    padding: 12px;
+  }
+
+  .overview-money-facts .metric-card .metric-card-icon {
+    height: 24px;
+    margin-bottom: 7px;
+    width: 24px;
+  }
+
+  .overview-money-facts .metric-card .metric-card-label {
+    font-size: 10px;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .overview-money-facts .metric-card .metric-card-value {
+    font-size: clamp(16px, 4.8vw, 21px);
+    letter-spacing: -0.055em;
+    line-height: 1.05;
+    margin: 5px 0 3px;
+  }
+
+  .overview-money-facts .metric-card .metric-card-detail {
+    font-size: 9px;
+    line-height: 1.25;
+  }
+
+  .overview-money-facts .metric-card:nth-child(3) {
+    align-items: center;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-areas: "icon label value" "icon detail value";
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    min-height: 88px;
+  }
+
+  .overview-money-facts .metric-card:nth-child(3) .metric-card-icon {
+    grid-area: icon;
+    margin: 0;
+  }
+
+  .overview-money-facts .metric-card:nth-child(3) .metric-card-label {
+    grid-area: label;
+  }
+
+  .overview-money-facts .metric-card:nth-child(3) .metric-card-value {
+    grid-area: value;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .overview-money-facts .metric-card:nth-child(3) .metric-card-detail {
+    grid-area: detail;
+  }
+}
+
 /* Plan · el resultado y la gráfica son la primera lectura; la matemática se
    conserva en una explicación progresiva. */
 .projection-explanation {
@@ -1423,7 +1668,7 @@ summary:focus-visible {
   }
 
   .tab-bar {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .mobile-more-nav .more-nav-trigger {

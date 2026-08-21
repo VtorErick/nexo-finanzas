@@ -21,7 +21,7 @@ test.describe("Nexo UI flows", () => {
     const primaryNav = page.getByRole("navigation", { name: "Navegación principal" });
     await primaryNav.getByRole("button", { name: "Actividad" }).click();
     await expect(page).toHaveURL(/\?view=activity$/);
-    await expect(page.getByRole("heading", { name: "Movimientos por mes" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historial" })).toBeVisible();
 
     await page.goBack();
     await expect(page).toHaveURL(/\/$/);
@@ -52,7 +52,7 @@ test.describe("Nexo UI flows", () => {
   test("makes activity filters readable and recoverable", async ({ page }) => {
     test.skip(test.info().project.name === "mobile-chromium", "Los filtros se validan en escritorio y la barra móvil se valida en el test dedicado.");
     await page.getByRole("navigation", { name: "Navegación principal" }).getByRole("button", { name: "Actividad" }).click();
-    await expect(page.getByRole("heading", { name: "Movimientos por mes" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historial" })).toBeVisible();
     const search = page.locator("#activity-search");
     await search.fill("super");
     await expect(page.locator(".filter-chip")).toContainText("Busca: super");
@@ -77,12 +77,12 @@ test.describe("Nexo UI flows", () => {
     await expect(filterPanel).not.toBeVisible();
   });
 
-  test("keeps three clear destinations and groups secondary screens", async ({ page }) => {
+  test("keeps four clear destinations and groups secondary screens", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
 
     const tabBar = page.getByRole("navigation", { name: "Navegación de secciones" });
-    await expect(tabBar.getByRole("button")).toHaveCount(4);
+    await expect(tabBar.getByRole("button")).toHaveCount(5);
     await expect(tabBar).toBeVisible();
 
     await tabBar.getByRole("button", { name: "Más" }).click();
