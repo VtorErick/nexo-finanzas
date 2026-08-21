@@ -2257,11 +2257,19 @@ export default function Home() {
           </ContextRail>
 
           <section className="overview-insight-grid">
-            <article className="panel cashflow-panel">
-              <div className="panel-heading"><div><span className="eyebrow">ESTE MES</span><h2>Entró y salió</h2><p>Un resumen corto de tus movimientos reales.</p></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver movimientos <span aria-hidden="true">→</span></button></div>
-              <div className="cashflow-summary"><div><span>Entró</span><strong className="positive-value">{formatMoney(monthIncome)}</strong></div><div><span>Salió</span><strong>{formatMoney(monthExpense)}</strong></div><div className="overview-secondary-metric"><span>Resultado</span><strong>{savingsRate === null ? "—" : `${savingsRate.toLocaleString("es-MX", { maximumFractionDigits: 0 })}%`}</strong></div></div>
-               <div className="overview-flow-link"><span>El detalle mensual vive en Actividad, junto con tus filtros y categorías.</span><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver detalle <span aria-hidden="true">→</span></button></div>
-            </article>
+            <details className="panel overview-collapsible overview-cashflow">
+              <summary className="overview-collapsible-summary">
+                <span><span className="eyebrow">ESTE MES</span><strong>Entró y salió</strong><small>{formatMoney(monthNet)} de flujo neto · resumen mensual</small></span>
+                <span className="overview-collapsible-mark" aria-hidden="true">+</span>
+              </summary>
+              <div className="overview-collapsible-body">
+                <article className="cashflow-panel">
+                  <div className="panel-heading"><div><span className="eyebrow">ESTE MES</span><h2>Entró y salió</h2><p>Un resumen corto de tus movimientos reales.</p></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver movimientos <span aria-hidden="true">→</span></button></div>
+                  <div className="cashflow-summary"><div><span>Entró</span><strong className="positive-value">{formatMoney(monthIncome)}</strong></div><div><span>Salió</span><strong>{formatMoney(monthExpense)}</strong></div><div className="overview-secondary-metric"><span>Resultado</span><strong>{savingsRate === null ? "—" : `${savingsRate.toLocaleString("es-MX", { maximumFractionDigits: 0 })}%`}</strong></div></div>
+                  <div className="overview-flow-link"><span>El detalle mensual vive en Actividad, junto con tus filtros y categorías.</span><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver detalle <span aria-hidden="true">→</span></button></div>
+                </article>
+              </div>
+            </details>
 
             <article className="panel reserve-focus">
               <div className="panel-heading compact"><div><span className="eyebrow">PRIORIDAD ACTUAL</span><h2>Fondo de emergencia</h2></div><span className="goal-icon"><Icon name="shield" size={21} /></span></div>
@@ -2280,21 +2288,27 @@ export default function Home() {
                 }}
               />
             </article>
-          </section>
-
-           <section className="panel recent-panel">
-             <div className="panel-heading"><div><span className="eyebrow">RECIENTE</span><h2>Últimos movimientos</h2></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver todos <span aria-hidden="true">→</span></button></div>
-             {transactions.length === 0 ? <EmptyState icon="＋" title="Tu actividad aparecerá aquí" description="Registra un ingreso, gasto o transferencia para comenzar a ver el pulso de tu dinero." actions={<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button>} /> : <div className="transaction-list compact-list">
-               {transactions.slice(0, 3).map((transaction) => (
-                 <button className="transaction-row" type="button" key={transaction.id} aria-label={`Editar movimiento ${transaction.title}`} onClick={() => openTransactionEditor(transaction)}>
-                   <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
-                   <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}</small></span>
-                   <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "")}</span>
-                    <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatTransactionMoney(transaction.amount)}</strong>
-                 </button>
-               ))}
-             </div>}
            </section>
+
+           <details className="panel overview-collapsible recent-panel">
+             <summary className="overview-collapsible-summary">
+               <span><span className="eyebrow">RECIENTE</span><strong>Últimos movimientos</strong><small>{transactions.length === 0 ? "Aún no hay actividad" : `${Math.min(transactions.length, 3)} movimientos visibles`}</small></span>
+               <span className="overview-collapsible-mark" aria-hidden="true">+</span>
+             </summary>
+             <div className="overview-collapsible-body">
+               <div className="panel-heading"><div><span className="eyebrow">RECIENTE</span><h2>Últimos movimientos</h2></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver todos <span aria-hidden="true">→</span></button></div>
+               {transactions.length === 0 ? <EmptyState icon="＋" title="Tu actividad aparecerá aquí" description="Registra un ingreso, gasto o transferencia para comenzar a ver el pulso de tu dinero." actions={<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button>} /> : <div className="transaction-list compact-list">
+                 {transactions.slice(0, 3).map((transaction) => (
+                   <button className="transaction-row" type="button" key={transaction.id} aria-label={`Editar movimiento ${transaction.title}`} onClick={() => openTransactionEditor(transaction)}>
+                     <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
+                     <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}</small></span>
+                     <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "")}</span>
+                     <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatTransactionMoney(transaction.amount)}</strong>
+                   </button>
+                 ))}
+               </div>}
+             </div>
+           </details>
         </div>
 
         <section id="activity-view" className="view-page activity-view" hidden={activeView !== "activity"}>
@@ -2313,16 +2327,24 @@ export default function Home() {
             <span className="context-rail-hint">Los traspasos no alteran tu flujo neto.</span>
           </ContextRail>
 
-          <section className="activity-stat-grid" aria-label="Resumen del mes">
-            <article><span>Entró en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span><strong className="positive-value">+{formatMoney(activityMonthIncome)}</strong><small>{activityMonthTransactions.filter((transaction) => transaction.kind === "income").length} {activityMonthTransactions.filter((transaction) => transaction.kind === "income").length === 1 ? "ingreso" : "ingresos"}</small></article>
-            <article><span>Salió en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span><strong>−{formatMoney(activityMonthExpense)}</strong><small>{activityMonthTransactions.filter((transaction) => transaction.kind === "expense").length} {activityMonthTransactions.filter((transaction) => transaction.kind === "expense").length === 1 ? "gasto" : "gastos"}</small></article>
-            <article className={activityMonthNet >= 0 ? "is-positive" : "is-negative"}><span>Flujo neto</span><strong>{activityMonthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(activityMonthNet))}</strong><small>{activityMonthNet >= 0 ? "Disponible para tus prioridades" : "Gastaste más de lo que ingresó"}</small></article>
-          </section>
+          <details className="panel activity-summary-collapsible">
+            <summary className="activity-summary-trigger">
+              <span><span className="eyebrow">RESUMEN DEL MES</span><strong>{activityMonthLabel}</strong><small>{activityMonthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(activityMonthNet))} de flujo neto · ver estadísticas y tendencia</small></span>
+              <span className="overview-collapsible-mark" aria-hidden="true">+</span>
+            </summary>
+            <div className="activity-summary-body">
+              <section className="activity-stat-grid" aria-label="Resumen del mes">
+                <article><span>Entró en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span><strong className="positive-value">+{formatMoney(activityMonthIncome)}</strong><small>{activityMonthTransactions.filter((transaction) => transaction.kind === "income").length} {activityMonthTransactions.filter((transaction) => transaction.kind === "income").length === 1 ? "ingreso" : "ingresos"}</small></article>
+                <article><span>Salió en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span><strong>−{formatMoney(activityMonthExpense)}</strong><small>{activityMonthTransactions.filter((transaction) => transaction.kind === "expense").length} {activityMonthTransactions.filter((transaction) => transaction.kind === "expense").length === 1 ? "gasto" : "gastos"}</small></article>
+                <article className={activityMonthNet >= 0 ? "is-positive" : "is-negative"}><span>Flujo neto</span><strong>{activityMonthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(activityMonthNet))}</strong><small>{activityMonthNet >= 0 ? "Disponible para tus prioridades" : "Gastaste más de lo que ingresó"}</small></article>
+              </section>
 
-          <section className="panel activity-chart-card">
-            <div className="panel-heading"><div><span className="eyebrow">ÚLTIMOS 6 MESES</span><h2>Ingresos frente a gastos</h2></div><div className="chart-key"><span><i className="key-income" />Ingresos</span><span><i className="key-expense" />Gastos</span></div></div>
-            <CashflowChart data={cashflowData} />
-          </section>
+              <section className="panel activity-chart-card">
+                <div className="panel-heading"><div><span className="eyebrow">ÚLTIMOS 6 MESES</span><h2>Ingresos frente a gastos</h2></div><div className="chart-key"><span><i className="key-income" />Ingresos</span><span><i className="key-expense" />Gastos</span></div></div>
+                <CashflowChart data={cashflowData} />
+              </section>
+            </div>
+          </details>
 
           <section className="panel ledger-card">
             <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Movimientos por mes</h2><p>Encuentra una operación por tipo, categoría o concepto.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
@@ -2426,19 +2448,24 @@ export default function Home() {
           </div>
 
           <aside className="side-column">
-            <section className="panel goal-card">
-              <div className="panel-heading compact"><div><span className="eyebrow">OBJETIVO PRINCIPAL</span><h2>Reserva de emergencia</h2></div><span className="goal-icon" aria-hidden="true"><Icon name="target" size={21} /></span></div>
-              <div className="goal-content"><GoalRing progress={reserveProgress} /><div className="goal-copy"><strong>{formatMoney(reserve)}</strong><span>de {formatMoney(target)}</span><small>Te faltan {formatMoney(Math.max(target - reserve, 0))}</small></div></div>
-              <div className="progress-track"><span style={{ width: `${reserveProgress}%` }} /></div>
-              <div className="goal-fields">
-                <label className="target-field"><span>Gasto esencial mensual <em>no es un ingreso</em></span><div><b>$</b><input aria-label="Gasto esencial mensual para calcular meses de cobertura" aria-describedby="expense-purpose" type="text" inputMode="decimal" value={monthlyExpensesText} onChange={(event) => setMonthlyExpensesText(event.target.value)} onBlur={() => setMonthlyExpensesText(formatNumberInput(monthlyExpenses))} /></div></label>
-                <p className="field-help" id="expense-purpose">Solo calcula la referencia de 3 a 6 meses y tu cobertura. No se suma al patrimonio ni a la proyección.</p>
-                <label className="target-field"><span>Tu meta personalizada</span><div><b>$</b><input aria-label="Meta del fondo de emergencia" type="text" inputMode="decimal" value={targetText} onChange={(event) => setTargetText(event.target.value)} onBlur={() => setTargetText(formatNumberInput(target))} /></div></label>
+            <details className="panel goal-card accounts-goal-collapsible">
+              <summary className="panel-heading compact accounts-goal-summary">
+                <div><span className="eyebrow">OBJETIVO PRINCIPAL</span><h2>Reserva de emergencia</h2><small>{reserveProgress}% completado · {formatMoney(reserve)} de {formatMoney(target)}</small></div>
+                <span className="goal-icon" aria-hidden="true"><Icon name="target" size={21} /></span>
+              </summary>
+              <div className="goal-card-body">
+                <div className="goal-content"><GoalRing progress={reserveProgress} /><div className="goal-copy"><strong>{formatMoney(reserve)}</strong><span>de {formatMoney(target)}</span><small>Te faltan {formatMoney(Math.max(target - reserve, 0))}</small></div></div>
+                <div className="progress-track"><span style={{ width: `${reserveProgress}%` }} /></div>
+                <div className="goal-fields">
+                  <label className="target-field"><span>Gasto esencial mensual <em>no es un ingreso</em></span><div><b>$</b><input aria-label="Gasto esencial mensual para calcular meses de cobertura" aria-describedby="expense-purpose" type="text" inputMode="decimal" value={monthlyExpensesText} onChange={(event) => setMonthlyExpensesText(event.target.value)} onBlur={() => setMonthlyExpensesText(formatNumberInput(monthlyExpenses))} /></div></label>
+                  <p className="field-help" id="expense-purpose">Solo calcula la referencia de 3 a 6 meses y tu cobertura. No se suma al patrimonio ni a la proyección.</p>
+                  <label className="target-field"><span>Tu meta personalizada</span><div><b>$</b><input aria-label="Meta del fondo de emergencia" type="text" inputMode="decimal" value={targetText} onChange={(event) => setTargetText(event.target.value)} onBlur={() => setTargetText(formatNumberInput(target))} /></div></label>
+                </div>
+                <div className="coverage-card"><span>Cobertura actual</span><strong>{coverageMonths === null ? "—" : `${coverageMonths.toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses`}</strong><small>{coverageMonths === null ? "Agrega tu gasto esencial para calcularla." : coverageMonths >= 6 ? "Supera la referencia amplia de 6 meses." : coverageMonths >= 3 ? "Dentro de la referencia habitual de 3 a 6 meses." : "Por debajo de la referencia inicial de 3 meses."}</small></div>
+                <div className="goal-suggestions"><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMin))}>Usar 3 meses</button><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMax))}>Usar 6 meses</button></div>
+                <p className="ideal-note"><strong>Referencia ideal:</strong> entre {formatMoney(recommendedTargetMin)} y {formatMoney(recommendedTargetMax)} según tus gastos actuales. Mantén una meta personalizada si tu situación requiere más cobertura.</p>
               </div>
-              <div className="coverage-card"><span>Cobertura actual</span><strong>{coverageMonths === null ? "—" : `${coverageMonths.toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses`}</strong><small>{coverageMonths === null ? "Agrega tu gasto esencial para calcularla." : coverageMonths >= 6 ? "Supera la referencia amplia de 6 meses." : coverageMonths >= 3 ? "Dentro de la referencia habitual de 3 a 6 meses." : "Por debajo de la referencia inicial de 3 meses."}</small></div>
-              <div className="goal-suggestions"><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMin))}>Usar 3 meses</button><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMax))}>Usar 6 meses</button></div>
-              <p className="ideal-note"><strong>Referencia ideal:</strong> entre {formatMoney(recommendedTargetMin)} y {formatMoney(recommendedTargetMax)} según tus gastos actuales. Mantén una meta personalizada si tu situación requiere más cobertura.</p>
-            </section>
+            </details>
 
           </aside>
         </section>
@@ -2509,27 +2536,32 @@ export default function Home() {
           <div className={`projection-grid ${advancedPlanOpen ? "has-advanced-plan" : "simple-plan"}`}>
             <div className="panel projection-card comparison-view">
               <div className="projection-summary-head" role="status" aria-live="polite"><div><span>Neto estimado al final, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>{years} {years === 1 ? "año" : "años"} · después de costos e ISR estimados</small></div><span className="projection-badge success">3 líneas comparables</span></div>
-              <div className="projection-interpretation" aria-label="Cómo leer el resultado">
-                <div><span>Valor nominal</span><strong>{formatMoney(lastNominalTotal)}</strong><small>Sin descontar inflación</small></div>
-                <div><span>Pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Resultado comparable</small></div>
-                <div><span>Efecto acumulado</span><strong>{formatMoney(inflationImpact)}</strong><small>Inflación estimada</small></div>
-              </div>
-              <div className="projection-story" aria-label="Cómo se forma la proyección">
-                <div><span>Parte de hoy</span><strong>{formatMoney(projectedStartingTotal)}</strong><small>{formatMoney(reserve)} reserva + {formatMoney(gbm)} inversión</small></div>
-                <i aria-hidden="true">+</i>
-                <div><span>Aportaciones netas</span><strong>{formatMoney(projection.netContributions)}</strong><small>{projectedEventSeries} {projectedEventSeries === 1 ? "serie" : "series"} de agenda + {activeExtras.length} {activeExtras.length === 1 ? "escenario" : "escenarios"}</small></div>
-                <i aria-hidden="true">+</i>
-                <div><span>Rendimiento estimado</span><strong>{formatMoney(estimatedReturn)}</strong><small>Con los supuestos elegidos</small></div>
-                <i aria-hidden="true">=</i>
-                <div className="story-result"><span>Total neto al salir</span><strong>{formatMoney(lastNominalTotal)}</strong><small>Al final de {years} {years === 1 ? "año" : "años"}</small></div>
-              </div>
-              <p className="projection-scope"><span className="projection-scope-icon" aria-hidden="true">i</span><span className="projection-scope-copy"><strong>{formatMoney(cash)} disponibles no se proyectan.</strong> Conservan su función de liquidez y no reciben rendimiento hasta que los clasifiques como reserva o inversión.</span></p>
-              <div className="projection-metrics">
-                <div className="projection-metric gross-metric"><span>Total antes de salida</span><strong>{formatMoney(lastGrossNominalTotal)}</strong><small>Reserva + inversión</small></div>
-                <div className="projection-metric real-metric"><span>Neto al salir, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Después de costos e ISR estimados</small></div>
-                <div className="projection-metric cost-metric"><span>Costos de salida</span><strong>−{formatMoney(projection.exitCosts)}</strong><small>Comisión + ISR sobre ganancia</small></div>
-              </div>
               <ProjectionChart points={comparisonPoints} goalMonth={projection.goalMonth} years={years} target={target} baseDate={today} />
+              <details className="projection-explanation">
+                <summary>Cómo se forma esta cifra <small>Ver comparación, aportaciones y costos</small></summary>
+                <div className="projection-explanation-body">
+                  <div className="projection-interpretation" aria-label="Cómo leer el resultado">
+                    <div><span>Valor nominal</span><strong>{formatMoney(lastNominalTotal)}</strong><small>Sin descontar inflación</small></div>
+                    <div><span>Pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Resultado comparable</small></div>
+                    <div><span>Efecto acumulado</span><strong>{formatMoney(inflationImpact)}</strong><small>Inflación estimada</small></div>
+                  </div>
+                  <div className="projection-story" aria-label="Cómo se forma la proyección">
+                    <div><span>Parte de hoy</span><strong>{formatMoney(projectedStartingTotal)}</strong><small>{formatMoney(reserve)} reserva + {formatMoney(gbm)} inversión</small></div>
+                    <i aria-hidden="true">+</i>
+                    <div><span>Aportaciones netas</span><strong>{formatMoney(projection.netContributions)}</strong><small>{projectedEventSeries} {projectedEventSeries === 1 ? "serie" : "series"} de agenda + {activeExtras.length} {activeExtras.length === 1 ? "escenario" : "escenarios"}</small></div>
+                    <i aria-hidden="true">+</i>
+                    <div><span>Rendimiento estimado</span><strong>{formatMoney(estimatedReturn)}</strong><small>Con los supuestos elegidos</small></div>
+                    <i aria-hidden="true">=</i>
+                    <div className="story-result"><span>Total neto al salir</span><strong>{formatMoney(lastNominalTotal)}</strong><small>Al final de {years} {years === 1 ? "año" : "años"}</small></div>
+                  </div>
+                  <p className="projection-scope"><span className="projection-scope-icon" aria-hidden="true">i</span><span className="projection-scope-copy"><strong>{formatMoney(cash)} disponibles no se proyectan.</strong> Conservan su función de liquidez y no reciben rendimiento hasta que los clasifiques como reserva o inversión.</span></p>
+                  <div className="projection-metrics">
+                    <div className="projection-metric gross-metric"><span>Total antes de salida</span><strong>{formatMoney(lastGrossNominalTotal)}</strong><small>Reserva + inversión</small></div>
+                    <div className="projection-metric real-metric"><span>Neto al salir, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Después de costos e ISR estimados</small></div>
+                    <div className="projection-metric cost-metric"><span>Costos de salida</span><strong>−{formatMoney(projection.exitCosts)}</strong><small>Comisión + ISR sobre ganancia</small></div>
+                  </div>
+                </div>
+              </details>
               <p className="chart-note">La línea neta supone una venta al final del horizonte y descuenta comisión de Trading MX e ISR sobre la ganancia. Las tasas son supuestos editables y no constituyen una garantía.</p>
               <details className="projection-data"><summary>Ver tabla anual accesible</summary><div><table><caption>Proyección anual en pesos mexicanos</caption><thead><tr><th>Periodo</th><th>Reserva</th><th>Inversión</th><th>Pesos de hoy</th></tr></thead><tbody>{annualProjectionPoints.map((point) => <tr key={point.month}><th>{point.month === 0 ? "Hoy" : formatDurationMonths(point.month)}</th><td>{formatMoney(point.reserve)}</td><td>{formatMoney(point.gbm)}</td><td>{formatMoney(point.realTotal)}</td></tr>)}</tbody></table></div></details>
             </div>
@@ -2577,14 +2609,12 @@ export default function Home() {
           />
           <ContextRail label="Estado de tus datos">
             <span><i className="status-dot green" /> {lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</span>
-            <span>Sin credenciales bancarias</span>
-            <span>Exporta una copia antes de cambiar de dispositivo.</span>
           </ContextRail>
           <div className="backup-summary"><span className="backup-summary-copy"><span className="eyebrow">RESPALDO COMPLETO</span><strong>Guardar o restaurar tus datos</strong><small>Excel verificable para conservarlos o moverlos a otro navegador</small></span><span className="backup-summary-action"><Icon name="download" size={22} /></span></div>
           <div className="backup-body" aria-busy={backupBusy}>
              <div className="backup-copy"><h2 id="backup-title">Guarda una copia</h2><p>Descarga tus datos para conservarlos o usarlos en otro navegador.</p><p className="backup-includes"><strong>Incluye:</strong> cuentas, movimientos, agenda y plan.</p></div>
              <div className="data-safety-summary" aria-label="Estado de conservación de tus datos"><div><i className="status-dot green" /><span><strong>{lastSavedAt ? "Guardado local confirmado" : "Guardado automático activo"}</strong><small>{lastSavedAt ? `Última actualización ${new Date(lastSavedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : "Tus cambios se conservan en este dispositivo"}</small></span></div><span className="data-mode-chip">{modeLabel}</span></div>
-             <ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol>
+            <details className="backup-howto"><summary>Cómo funciona el respaldo <small>Descarga, conserva e importa cuando lo necesites</small></summary><ol className="backup-flow-steps" aria-label="Pasos para conservar tus datos"><li><b>1</b><span><strong>Descarga</strong><small>Guarda una copia completa.</small></span></li><li><b>2</b><span><strong>Conserva</strong><small>Muévela a otro dispositivo si quieres.</small></span></li><li><b>3</b><span><strong>Importa</strong><small>Valida antes de reemplazar.</small></span></li></ol></details>
             <div className="backup-actions"><button type="button" className="primary-button" disabled={backupBusy} onClick={exportBackup}>{backupBusy ? "Preparando Excel…" : "Descargar Excel"}</button><button type="button" className="secondary-button" disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Importar Excel</button></div>
           <input ref={backupInputRef} hidden type="file" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" onChange={importBackup} />
             {importPreview && <section className="import-preview" aria-labelledby="import-preview-title"><div><span className="eyebrow">ARCHIVO VALIDADO</span><h3 id="import-preview-title">{importPreview.fileName}</h3><StatusMessage tone="warning" live="off">La importación reemplazará los datos actuales de este navegador.</StatusMessage><span className="import-preview-status"><i className="status-dot green" /> Listo para revisar y confirmar</span></div><div className="import-preview-grid"><span><b>{importPreview.data.accounts.length}</b> cuentas</span><span><b>{importPreview.data.transactions.length}</b> operaciones</span><span><b>{importPreview.data.events.length}</b> movimientos planeados</span><span><b>{importPreview.data.extras.length}</b> escenarios</span></div><div className="import-preview-actions"><button type="button" className="secondary-button" onClick={() => { setImportPreview(null); setBackupStatus("Importación cancelada. Tus datos actuales no cambiaron."); }}>Cancelar</button><button type="button" className="primary-button" onClick={() => applyImportedBackup(importPreview)}>Importar y reemplazar</button></div></section>}
@@ -2596,11 +2626,14 @@ export default function Home() {
             </StatusMessage>
             <details className="backup-advanced"><summary>Opciones avanzadas</summary><div className="backup-reset"><div><strong>Restablecer datos de ejemplo</strong><p>Reemplaza la información guardada por cuentas y movimientos ficticios. No modifica los archivos de Excel que ya descargaste.</p></div><button type="button" className="danger-button" disabled={backupBusy} onClick={resetToExampleData}>Restablecer datos</button></div></details>
           </div>
-          <div className="data-principles">
-            <article><span>01</span><strong>Sin credenciales bancarias</strong><p>No pedimos accesos ni enviamos movimientos a servicios de terceros.</p></article>
-            <article><span>02</span><strong>Guardado automático</strong><p>Cada cambio se conserva localmente en este dispositivo.</p></article>
-            <article><span>03</span><strong>Salida abierta</strong><p>Tu respaldo de Excel es legible y puede importarse de nuevo.</p></article>
-          </div>
+          <details className="data-principles-disclosure">
+            <summary>Privacidad y control de tus datos <small>Sin credenciales bancarias · guardado local</small></summary>
+            <div className="data-principles">
+              <article><span>01</span><strong>Sin credenciales bancarias</strong><p>No pedimos accesos ni enviamos movimientos a servicios de terceros.</p></article>
+              <article><span>02</span><strong>Guardado automático</strong><p>Cada cambio se conserva localmente en este dispositivo.</p></article>
+              <article><span>03</span><strong>Salida abierta</strong><p>Tu respaldo de Excel es legible y puede importarse de nuevo.</p></article>
+            </div>
+          </details>
         </section>
 
         <footer className="footer"><button className="brand footer-brand" type="button" onClick={() => navigateTo("overview")}><BrandMark /><span className="brand-text">Nexo</span></button><p>Claridad para decidir mejor.</p><button type="button" className="footer-backup" onClick={openBackupPanel}>Abrir respaldo</button><span>Uso personal · MXN</span></footer>

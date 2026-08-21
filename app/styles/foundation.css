@@ -221,6 +221,188 @@ textarea:disabled {
   }
 }
 
+/* Plan · el resultado y la gráfica son la primera lectura; la matemática se
+   conserva en una explicación progresiva. */
+.projection-explanation {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 16px;
+}
+
+.projection-explanation > summary {
+  align-items: center;
+  color: var(--accent-strong);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 52px;
+  padding: 8px 22px;
+}
+
+.projection-explanation > summary::-webkit-details-marker {
+  display: none;
+}
+
+.projection-explanation > summary::after {
+  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  content: "";
+  flex: 0 0 auto;
+  height: 7px;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+  width: 7px;
+}
+
+.projection-explanation[open] > summary::after {
+  transform: rotate(225deg);
+}
+
+.projection-explanation > summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.projection-explanation-body {
+  border-top: 1px solid var(--line-soft);
+}
+
+.projection-explanation-body .projection-interpretation,
+.projection-explanation-body .projection-story,
+.projection-explanation-body .projection-metrics {
+  margin-top: 0;
+}
+
+@media (max-width: 699px) {
+  .projection-explanation > summary {
+    align-items: flex-start;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 62px;
+    padding: 10px 16px;
+  }
+
+  .projection-explanation > summary small {
+    grid-column: 1;
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .projection-explanation > summary::after {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-top: 7px;
+  }
+}
+
+/* El orden visual debe coincidir con el orden de decisión, incluso cuando el
+   layout móvil usa flex para reordenar el gráfico. */
+@media (max-width: 699px) {
+  .projection-card .projection-summary-head { order: 1; }
+  .projection-card .chart-shell { order: 2; }
+  .projection-card .projection-explanation { order: 3; }
+  .projection-card .chart-note { order: 4; }
+  .projection-card .projection-data { order: 5; }
+}
+
+/* Datos · acciones arriba, garantías y procedimiento bajo demanda. */
+.backup-howto,
+.data-principles-disclosure {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 16px;
+}
+
+.backup-howto > summary,
+.data-principles-disclosure > summary {
+  align-items: center;
+  color: var(--accent-strong);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 10px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 52px;
+  padding: 8px 0;
+}
+
+.backup-howto > summary::-webkit-details-marker,
+.data-principles-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.backup-howto > summary::after,
+.data-principles-disclosure > summary::after {
+  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  content: "";
+  flex: 0 0 auto;
+  height: 7px;
+  transform: rotate(45deg);
+  width: 7px;
+}
+
+.backup-howto[open] > summary::after,
+.data-principles-disclosure[open] > summary::after {
+  transform: rotate(225deg);
+}
+
+.backup-howto > summary small,
+.data-principles-disclosure > summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.backup-howto .backup-flow-steps {
+  border-top: 1px solid var(--line-soft);
+  margin: 0;
+  padding-top: 12px;
+}
+
+.data-principles-disclosure .data-principles {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 0;
+  padding-top: 14px;
+}
+
+@media (max-width: 699px) {
+  .backup-howto > summary,
+  .data-principles-disclosure > summary {
+    align-items: flex-start;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 62px;
+  }
+
+  .backup-howto > summary small,
+  .data-principles-disclosure > summary small {
+    grid-column: 1;
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .backup-howto > summary::after,
+  .data-principles-disclosure > summary::after {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-top: 7px;
+  }
+}
+
 .import-preview {
   background: var(--surface-accent);
   border: 1px solid var(--accent-soft);
@@ -1785,5 +1967,432 @@ summary:focus-visible {
   .projection-story strong {
     font-size: 17px;
     white-space: nowrap;
+  }
+}
+
+/* ============================================================
+   Auditoría global · contención, lectura y barra fija segura
+   ============================================================ */
+
+/* Todo contenedor flexible debe poder encogerse antes de empujar la página
+   hacia un scroll horizontal. Esta regla evita el origen más frecuente de
+   textos cortados en tarjetas y tablas. */
+.app-shell,
+.content-area,
+.page-wrap,
+.view-page,
+.section-wrap,
+.dashboard-grid,
+.main-column,
+.side-column,
+.projection-grid,
+.backup-panel,
+.panel,
+.overview-grid,
+.overview-insight-grid,
+.account-table,
+.transaction-list,
+.transaction-row,
+.view-header,
+.view-header-end,
+.panel-heading,
+.section-heading {
+  min-width: 0;
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.page-wrap {
+  padding-bottom: calc(112px + var(--floating-safe-space, 0px));
+}
+
+.tab-bar {
+  box-shadow: 0 -8px 24px rgba(8, 15, 27, 0.08);
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+.view-header > *,
+.view-header-end > *,
+.panel-heading > *,
+.section-heading > *,
+.transaction-copy,
+.account-name > div,
+.account-group-heading > span,
+.projection-summary-head > div,
+.projection-scope-copy {
+  min-width: 0;
+}
+
+.view-header h1,
+.view-header p,
+.panel-heading h2,
+.panel-heading p,
+.section-heading h2,
+.section-heading p,
+.transaction-copy strong,
+.transaction-copy small,
+.account-name strong,
+.account-name small,
+.account-rate,
+.account-group-heading small,
+.projection-scope-copy,
+.chart-note,
+.backup-copy p,
+.data-principles p {
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.hero-amount,
+.metric-card-value,
+.account-balance,
+.account-group-heading b,
+.transaction-amount,
+.activity-stat-grid strong,
+.projection-summary-head strong,
+.projection-interpretation strong,
+.projection-story strong,
+.projection-metric strong,
+.extra-saved-amount {
+  font-variant-numeric: tabular-nums;
+  max-width: 100%;
+  overflow-wrap: normal;
+  text-overflow: clip;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+@media (max-width: 699px) {
+  .page-wrap {
+    padding-bottom: calc(132px + env(safe-area-inset-bottom));
+  }
+
+  .tab-bar {
+    min-height: 68px;
+  }
+
+  .view-header-end {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .view-header-end > button,
+  .view-header-end > .primary-button,
+  .view-header-end > .secondary-button {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .overview-grid,
+  .activity-stat-grid,
+  .data-principles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-stat-grid article {
+    min-width: 0;
+  }
+
+  .account-table-head {
+    display: none;
+  }
+
+  .account-row {
+    align-items: start;
+    display: grid;
+    gap: 8px 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .account-row .account-name {
+    grid-column: 1 / -1;
+  }
+
+  .account-row .type-pill,
+  .account-row .account-rate {
+    justify-self: start;
+  }
+
+  .account-row .account-balance {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+
+@media (min-width: 700px) {
+  .page-wrap {
+    padding-bottom: 64px;
+  }
+}
+
+/* Inicio · una lectura ejecutiva por defecto, detalle bajo demanda. */
+.overview-insight-grid {
+  align-items: start;
+}
+
+.overview-collapsible {
+  overflow: hidden;
+}
+
+.overview-collapsible > summary {
+  list-style: none;
+}
+
+.overview-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.overview-collapsible-summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 78px;
+  padding: 18px 22px;
+}
+
+.overview-collapsible-summary > span:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.overview-collapsible-summary .eyebrow {
+  margin-bottom: 0;
+}
+
+.overview-collapsible-summary strong {
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.overview-collapsible-summary small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.overview-collapsible-mark {
+  align-items: center;
+  background: var(--surface-accent);
+  border-radius: 50%;
+  color: var(--accent-strong);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 22px;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.overview-collapsible[open] .overview-collapsible-mark {
+  font-size: 20px;
+}
+
+.overview-collapsible-body {
+  border-top: 1px solid var(--line-soft);
+}
+
+.overview-collapsible-body > .cashflow-panel,
+.overview-collapsible-body > .panel-heading {
+  box-shadow: none;
+}
+
+.overview-collapsible-body > .panel-heading {
+  border-bottom: 0;
+}
+
+.recent-panel .overview-collapsible-body {
+  background: var(--surface);
+}
+
+@media (max-width: 699px) {
+  .overview-collapsible-summary {
+    min-height: 72px;
+    padding: 16px;
+  }
+
+  .overview-collapsible-summary strong {
+    font-size: 15px;
+  }
+}
+
+/* Actividad · primero la lista; análisis y gráfica bajo demanda. */
+.activity-summary-collapsible {
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.activity-summary-collapsible > summary {
+  list-style: none;
+}
+
+.activity-summary-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.activity-summary-trigger {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 82px;
+  padding: 18px 22px;
+}
+
+.activity-summary-trigger > span:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.activity-summary-trigger .eyebrow {
+  margin-bottom: 0;
+}
+
+.activity-summary-trigger strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.activity-summary-trigger small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.activity-summary-body {
+  border-top: 1px solid var(--line-soft);
+  padding: 16px;
+}
+
+.activity-summary-body .activity-stat-grid {
+  margin-bottom: 16px;
+}
+
+.activity-summary-body .activity-chart-card {
+  margin-bottom: 0;
+}
+
+.activity-summary-body .activity-chart-card .panel-heading {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+@media (max-width: 699px) {
+  .activity-summary-trigger {
+    min-height: 76px;
+    padding: 16px;
+  }
+
+  .activity-summary-body {
+    padding: 12px;
+  }
+}
+
+/* Cuentas · consultar saldos no debe abrir toda la configuración de la meta. */
+.accounts-goal-collapsible {
+  overflow: hidden;
+}
+
+.accounts-goal-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.accounts-goal-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.accounts-goal-summary {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.accounts-goal-summary > div {
+  min-width: 0;
+}
+
+.accounts-goal-summary h2 {
+  margin-bottom: 3px;
+}
+
+.accounts-goal-summary small {
+  color: var(--muted);
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.accounts-goal-collapsible[open] .accounts-goal-summary {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.goal-card-body {
+  padding: 0 22px 22px;
+}
+
+@media (max-width: 699px) {
+  .accounts-goal-summary {
+    padding: 16px;
+  }
+
+  .goal-card-body {
+    padding: 0 16px 16px;
+  }
+}
+
+/* Corrección de auditoría: en móvil el saldo y el rendimiento de una cuenta
+   nunca comparten la misma fila. El importe queda junto al nombre y el resto
+   de metadatos ocupa líneas propias, sin superposición. */
+@media (max-width: 699px) {
+  .account-row {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 7px;
+  }
+
+  .account-row .account-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .account-row .account-balance {
+    align-self: start;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .account-row .type-pill {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .account-row .account-rate {
+    color: var(--muted);
+    font-size: 10.5px;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 }
