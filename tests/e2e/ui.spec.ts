@@ -75,6 +75,36 @@ test.describe("Nexo UI flows", () => {
     await page.screenshot({ path: "review-captures/audit27-activity-filters-visible-mobile.png", fullPage: false });
   });
 
+  test("keeps the activity cashflow chart inset on mobile", async ({ page }) => {
+    test.skip(test.info().project.name !== "mobile-chromium", "Este comportamiento solo aplica al layout móvil.");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?view=activity");
+
+    const summary = page.locator("#activity-view .activity-summary-collapsible");
+    await summary.locator("summary").click();
+    const chart = page.locator("#activity-view .activity-chart-card");
+    await expect(chart.locator(".panel-heading")).toBeVisible();
+    await chart.scrollIntoViewIfNeeded();
+
+    const metrics = await chart.evaluate((element) => {
+      const card = element.getBoundingClientRect();
+      const eyebrow = element.querySelector<HTMLElement>(".eyebrow")?.getBoundingClientRect();
+      const cashflow = element.querySelector<HTMLElement>(".cashflow-chart")?.getBoundingClientRect();
+      return {
+        cardLeft: card.left,
+        cardRight: card.right,
+        eyebrowLeft: eyebrow?.left ?? 0,
+        chartLeft: cashflow?.left ?? 0,
+        chartRight: cashflow?.right ?? 0,
+      };
+    });
+
+    expect(metrics.eyebrowLeft - metrics.cardLeft).toBeGreaterThanOrEqual(12);
+    expect(metrics.chartLeft - metrics.cardLeft).toBeGreaterThanOrEqual(12);
+    expect(metrics.cardRight - metrics.chartRight).toBeGreaterThanOrEqual(12);
+    await page.screenshot({ path: "review-captures/audit33-activity-chart-spacing-mobile.png", fullPage: false });
+  });
+
   test("opens planned movements in a modal, resets the section on navigation, and colors activity rows", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/?view=activity");

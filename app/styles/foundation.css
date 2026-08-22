@@ -3151,8 +3151,8 @@ body {
 }
 
 .activity-summary-body .activity-chart-card .panel-heading {
-  padding-left: 0;
-  padding-right: 0;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 @media (max-width: 699px) {
