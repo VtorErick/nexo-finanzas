@@ -2550,7 +2550,7 @@ export default function Home() {
           </details>
 
           <section className="panel ledger-card">
-            <div className="ledger-heading"><div><h2>Historial</h2><p>Elige un mes y encuentra una operación cuando la necesites.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
+            <div className="ledger-heading"><div className="ledger-heading-copy"><h2>Historial</h2><p>Busca y filtra tus movimientos.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar movimiento" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
             <div className="activity-month-selector" aria-label="Cambiar mes en vista">
               <button type="button" className="month-step-button" aria-label="Mes anterior" disabled={visibleActivityMonth <= (activityMonthOptions.at(-1) ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, -1))}>‹</button>
               <div className="picker-form-label"><span className="sr-only">Mes en vista</span><PickerField label="Mes en vista" ariaLabel="Mes en vista" value={visibleActivityMonth} options={activityMonthOptions.map((month) => ({ value: month, label: formatMonthGroupLabel(month) }))} onChange={setActivityMonth} /></div>
@@ -2564,7 +2564,7 @@ export default function Home() {
                  </div>
                  <div className="category-filter"><span>Categoría</span><PickerField label="Filtrar por categoría" ariaLabel="Filtrar por categoría" value={activityCategory} options={[{ value: "all", label: "Todas", description: "Mostrar todas las categorías" }, ...categories.map((category) => ({ value: category.label, label: category.label }))]} onChange={setActivityCategory} /></div>
                </div>
-               <span className="ledger-result-count" aria-live="polite" aria-busy={activitySearch !== deferredActivitySearch}>{filteredTransactions.length} de {activityMonthTransactions.length} movimiento{activityMonthTransactions.length === 1 ? "" : "s"} en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span>
+               <span className="ledger-result-count" aria-live="polite" aria-busy={activitySearch !== deferredActivitySearch}>{filteredTransactions.length === activityMonthTransactions.length ? filteredTransactions.length : `${filteredTransactions.length} de ${activityMonthTransactions.length}`} movimiento{activityMonthTransactions.length === 1 ? "" : "s"} · {activityMonthLabel.toLocaleLowerCase("es-MX")}</span>
             </div>
              <FilterChips chips={activityFilterChips} onClear={clearActivityFilters} />
              {filteredTransactions.length === 0 ? (

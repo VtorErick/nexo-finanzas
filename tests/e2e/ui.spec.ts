@@ -75,6 +75,29 @@ test.describe("Nexo UI flows", () => {
     await page.screenshot({ path: "review-captures/audit27-activity-filters-visible-mobile.png", fullPage: false });
   });
 
+  test("keeps activity history controls compact on mobile", async ({ page }) => {
+    test.skip(test.info().project.name !== "mobile-chromium", "Este comportamiento solo aplica al layout móvil.");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?view=activity");
+
+    const ledger = page.locator("#activity-view .ledger-card");
+    await expect(ledger.locator(".ledger-heading h2")).toHaveText("Historial");
+    await expect(ledger.locator(".ledger-heading p")).toHaveText("Busca y filtra tus movimientos.");
+    await expect(ledger.locator(".filter-tabs")).toBeVisible();
+    await expect(ledger.locator(".category-filter")).toBeVisible();
+    await ledger.getByRole("button", { name: "Mes anterior" }).click();
+    await expect(ledger.getByRole("button", { name: "Ir al mes actual" })).toBeVisible();
+
+    const widthMetrics = await page.locator("#activity-view").evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(widthMetrics.scrollWidth).toBeLessThanOrEqual(widthMetrics.clientWidth);
+
+    await ledger.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "review-captures/audit34-activity-history-controls-mobile.png", fullPage: false });
+  });
+
   test("keeps the activity cashflow chart inset on mobile", async ({ page }) => {
     test.skip(test.info().project.name !== "mobile-chromium", "Este comportamiento solo aplica al layout móvil.");
     await page.setViewportSize({ width: 390, height: 844 });
