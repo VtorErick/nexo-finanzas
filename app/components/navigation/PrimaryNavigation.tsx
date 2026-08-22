@@ -6,6 +6,8 @@ export type PrimaryNavigationItem = {
   icon: ReactNode;
 };
 
+export type QuickActionKind = "expense" | "income" | "transfer";
+
 type PrimaryNavigationProps = {
   items: PrimaryNavigationItem[];
   secondaryItems: PrimaryNavigationItem[];
@@ -20,7 +22,7 @@ type PrimaryNavigationProps = {
   isExample: boolean;
   saveStatus?: string;
   onBackup: () => void;
-  onNewTransaction: () => void;
+  onNewTransaction: (kind?: QuickActionKind) => void;
 };
 
 function BrandMark() {
@@ -87,9 +89,12 @@ export function PrimaryNavigation({
   onNewTransaction,
 }: PrimaryNavigationProps) {
   const activeItem = [...items, ...secondaryItems].find((item) => item.id === activeView);
+  const mobileDataItem = secondaryItems.find((item) => item.id === "data") ?? secondaryItems[0];
   const [moreOpen, setMoreOpen] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const desktopMoreRef = useRef<HTMLDivElement>(null);
   const mobileMoreRef = useRef<HTMLDivElement>(null);
+  const quickActionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -107,6 +112,22 @@ export function PrimaryNavigation({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [moreOpen]);
+
+  useEffect(() => {
+    if (!quickActionsOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!quickActionsRef.current?.contains(event.target as Node)) setQuickActionsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQuickActionsOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [quickActionsOpen]);
 
   function handleNavigate(view: string) {
     setMoreOpen(false);
@@ -144,7 +165,7 @@ export function PrimaryNavigation({
             <ThemeButton theme={theme} icon={themeIcon} onToggle={onToggleTheme} />
             <button className="backup-button" type="button" aria-label="Abrir respaldo de datos" onClick={onBackup}>{backupIcon}<span>Respaldo</span></button>
           </div>
-          <button className="primary-button edit-balances-button" type="button" onClick={onNewTransaction}>+ Movimiento</button>
+          <button className="primary-button edit-balances-button" type="button" onClick={() => onNewTransaction()}>+ Movimiento</button>
         </div>
       </aside>
 
@@ -156,13 +177,11 @@ export function PrimaryNavigation({
         <span className="mobile-view-label" aria-live="polite">{activeItem?.label}</span>
         <div className="top-actions">
           <ThemeButton theme={theme} icon={themeIcon} compact onToggle={onToggleTheme} />
-          <button className="primary-button edit-balances-button" type="button" aria-label="Registrar movimiento" onClick={onNewTransaction}>
-            <span className="label-full">+ Movimiento</span>
-            <span className="label-short" aria-hidden="true">+</span>
-          </button>
+          {mobileDataItem && <button className="mobile-data-button" type="button" aria-label="Abrir datos" onClick={() => onNavigate(mobileDataItem.id)}>{mobileDataItem.icon}</button>}
         </div>
       </header>
 
+      {quickActionsOpen && <button type="button" className="quick-actions-backdrop" aria-label="Cerrar acciones rápidas" onClick={() => setQuickActionsOpen(false)} />}
       <nav className="tab-bar" aria-label="Navegación de secciones">
         {items.map((item) => (
           <button
@@ -175,7 +194,16 @@ export function PrimaryNavigation({
             {item.icon}<span>{item.label}</span>
           </button>
         ))}
-        <div ref={mobileMoreRef} className="mobile-more-nav"><MoreNavigation items={secondaryItems} activeView={activeView} open={moreOpen} onToggle={() => setMoreOpen((current) => !current)} onNavigate={handleNavigate} /></div>
+        <div ref={quickActionsRef} className={`quick-actions${quickActionsOpen ? " is-open" : ""}`}>
+          <div id="quick-action-list" className="quick-action-list" aria-hidden={!quickActionsOpen}>
+            <button type="button" aria-label="Gasto" className="quick-action quick-action-expense" tabIndex={quickActionsOpen ? 0 : -1} onClick={() => { setQuickActionsOpen(false); onNewTransaction("expense"); }}><span className="quick-action-icon" aria-hidden="true">↘</span><span className="quick-action-label">Gasto</span></button>
+            <button type="button" aria-label="Ingreso" className="quick-action quick-action-income" tabIndex={quickActionsOpen ? 0 : -1} onClick={() => { setQuickActionsOpen(false); onNewTransaction("income"); }}><span className="quick-action-icon" aria-hidden="true">↗</span><span className="quick-action-label">Ingreso</span></button>
+            <button type="button" aria-label="Transferencia" className="quick-action quick-action-transfer" tabIndex={quickActionsOpen ? 0 : -1} onClick={() => { setQuickActionsOpen(false); onNewTransaction("transfer"); }}><span className="quick-action-icon" aria-hidden="true">⇄</span><span className="quick-action-label">Transferencia</span></button>
+          </div>
+          <button type="button" className="quick-actions-toggle" aria-label="Registrar movimiento" aria-expanded={quickActionsOpen} aria-controls="quick-action-list" onClick={() => setQuickActionsOpen((current) => !current)}>
+            <span aria-hidden="true">+</span>
+          </button>
+        </div>
       </nav>
     </>
   );

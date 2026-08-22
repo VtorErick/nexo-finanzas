@@ -13,8 +13,10 @@ type MetricCardProps = {
 export function MetricCard({ label, value, detail, valueLabel, icon, tone = "neutral", className = "" }: MetricCardProps) {
   return (
     <article className={`metric-card metric-card-${tone} ${className}`.trim()}>
-      {icon && <span className="metric-card-icon" aria-hidden="true">{icon}</span>}
-      <span className="metric-card-label">{label}</span>
+      <div className="metric-card-heading">
+        {icon && <span className="metric-card-icon" aria-hidden="true">{icon}</span>}
+        <span className="metric-card-label">{label}</span>
+      </div>
       <strong className="metric-card-value" aria-label={valueLabel}>{value}</strong>
       <small className="metric-card-detail">{detail}</small>
     </article>

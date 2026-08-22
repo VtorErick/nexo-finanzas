@@ -14,14 +14,14 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { PrimaryNavigation, type PrimaryNavigationItem } from "./components/navigation/PrimaryNavigation";
+import { PrimaryNavigation, type PrimaryNavigationItem, type QuickActionKind } from "./components/navigation/PrimaryNavigation";
 import { ContextRail } from "./components/ui/ContextRail";
 import { ActionMenu } from "./components/ui/ActionMenu";
 import { EmptyState } from "./components/ui/EmptyState";
 import { FilterChips, type FilterChip } from "./components/ui/FilterChips";
 import { MetricCard } from "./components/ui/MetricCard";
 import { ModalShell } from "./components/ui/ModalShell";
-import { NextBestAction } from "./components/ui/NextBestAction";
+import { PickerField } from "./components/ui/PickerField";
 import { StatusMessage } from "./components/ui/StatusMessage";
 import { ViewHeader } from "./components/ui/ViewHeader";
 import {
@@ -30,13 +30,6 @@ import {
   type CategoryIconName,
   type TransactionCategory,
 } from "./lib/nexo-categories";
-import {
-  calculateReferenceValidation,
-  REFERENCE_SHEET,
-  SAVINGS_OPTIONS,
-  type ProtectionScheme,
-  type SavingsOption,
-} from "./lib/savings-options";
 import {
   clampFiniteNumber,
   parseMoneyInput,
@@ -81,6 +74,12 @@ type Theme = "light" | "dark";
 type AppView = "overview" | "activity" | "accounts" | "plan" | "data";
 type ImportedBackup = Awaited<ReturnType<typeof import("./lib/nexo-workbook").importNexoWorkbook>>;
 const APP_VIEWS = ["overview", "activity", "accounts", "plan", "data"] as const satisfies readonly AppView[];
+const INFO_TIP_OPEN_EVENT = "nexo:info-tip-open";
+const INFO_TIP_CLOSE_EVENT = "nexo:info-tip-close-all";
+
+function closeInfoTips() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(INFO_TIP_CLOSE_EVENT));
+}
 
 function isAppView(value: string | null): value is AppView {
   return value !== null && (APP_VIEWS as readonly string[]).includes(value);
@@ -88,8 +87,9 @@ function isAppView(value: string | null): value is AppView {
 
 function useDisclosureGroups(activeView: AppView) {
   useEffect(() => {
+    closeInfoTips();
     document.querySelectorAll<HTMLDetailsElement>("details[data-disclosure-group]").forEach((details) => {
-      details.open = false;
+      details.open = details.dataset.defaultOpen === "true";
     });
   }, [activeView]);
 
@@ -113,6 +113,15 @@ function viewFromLocation(): AppView {
   const view = new URL(window.location.href).searchParams.get("view");
   return isAppView(view) ? view : "overview";
 }
+
+function activityFilterFromLocation(value: string | null): "all" | TransactionKind {
+  return value === "income" || value === "expense" || value === "transfer" ? value : "all";
+}
+
+function activityMonthFromLocation(value: string | null, fallback: string) {
+  return value && /^\d{4}-\d{2}$/.test(value) ? value : fallback;
+}
+
 type TransactionKind = "expense" | "income" | "transfer";
 type StoredSnapshot = {
   schemaVersion?: number;
@@ -668,10 +677,6 @@ function normalizeStoredEvents(value: unknown) {
   });
 }
 
-function BrandMark() {
-  return <span className="brand-mark" aria-hidden="true">N</span>;
-}
-
 type IconName = "home" | "wallet" | "calendar" | "trend" | "database" | "sun" | "moon" | "shield" | "cash" | "download" | "target" | "food" | "car" | "services" | "health" | "shopping" | "education" | "entertainment" | "travel" | "work" | "general";
 const PRIMARY_NAV_ITEMS: Array<{ id: AppView; label: string; icon: IconName }> = [
   { id: "overview", label: "Hoy", icon: "home" },
@@ -722,6 +727,33 @@ function InfoTip({ text }: { text: string }) {
   const tooltipId = `info-tip-${useId().replace(/:/g, "")}`;
 
   useEffect(() => {
+    const closeWhenAnotherOpens = (event: Event) => {
+      const openedTooltipId = (event as CustomEvent<string>).detail;
+      if (openedTooltipId !== tooltipId) setOpen(false);
+    };
+    const closeAll = () => setOpen(false);
+    const closeWhenPointerLeaves = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!buttonRef.current?.contains(target) && !tooltipRef.current?.contains(target)) setOpen(false);
+    };
+    const closeWhenFocusLeaves = (event: FocusEvent) => {
+      const target = event.target as Node;
+      if (!buttonRef.current?.contains(target) && !tooltipRef.current?.contains(target)) setOpen(false);
+    };
+
+    window.addEventListener(INFO_TIP_OPEN_EVENT, closeWhenAnotherOpens);
+    window.addEventListener(INFO_TIP_CLOSE_EVENT, closeAll);
+    document.addEventListener("pointerdown", closeWhenPointerLeaves);
+    document.addEventListener("focusin", closeWhenFocusLeaves);
+    return () => {
+      window.removeEventListener(INFO_TIP_OPEN_EVENT, closeWhenAnotherOpens);
+      window.removeEventListener(INFO_TIP_CLOSE_EVENT, closeAll);
+      document.removeEventListener("pointerdown", closeWhenPointerLeaves);
+      document.removeEventListener("focusin", closeWhenFocusLeaves);
+    };
+  }, [tooltipId]);
+
+  useEffect(() => {
     if (!open) {
       const frameId = window.requestAnimationFrame(() => setTooltipStyle(undefined));
       return () => window.cancelAnimationFrame(frameId);
@@ -755,131 +787,41 @@ function InfoTip({ text }: { text: string }) {
   }, [open]);
 
   const tooltip = open ? <span ref={tooltipRef} id={tooltipId} className="info-tip-content" role="tooltip" style={tooltipStyle}>{text}</span> : null;
+  function toggleTooltip() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(INFO_TIP_OPEN_EVENT, { detail: tooltipId }));
+    setOpen(true);
+  }
+
   return <>
-    <button ref={buttonRef} type="button" className="info-tip" data-open={open ? "true" : "false"} aria-label={`Información: ${text}`} aria-expanded={open} aria-describedby={open ? tooltipId : undefined} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); event.currentTarget.focus(); } }}><span aria-hidden="true">i</span></button>
+    <button ref={buttonRef} type="button" className="info-tip" data-open={open ? "true" : "false"} aria-label={`Información: ${text}`} aria-expanded={open} aria-describedby={open ? tooltipId : undefined} onClick={toggleTooltip} onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); event.currentTarget.focus(); } }}><span aria-hidden="true">i</span></button>
     {tooltip && typeof document !== "undefined" ? createPortal(tooltip, document.body) : null}
   </>;
-}
-
-function protectionLabel(scheme: ProtectionScheme) {
-  if (scheme === "ipab") return "IPAB";
-  if (scheme === "prosofipo") return "PROSOFIPO";
-  if (scheme === "none") return "No IPAB/Fondo";
-  return "Por confirmar";
-}
-
-function validationLabel(status: SavingsOption["validationStatus"]) {
-  if (status === "verified") return "Confirmado";
-  if (status === "partial") return "Parcial";
-  return "Revisar";
-}
-
-function parseReferenceNumber(value: string, fallback: number, minimum: number, maximum: number) {
-  const numeric = Number(value.replace(",", "."));
-  return Number.isFinite(numeric) ? Math.min(Math.max(numeric, minimum), maximum) : fallback;
-}
-
-function SavingsOptionsReference({ onOpen }: { onOpen?: () => void }) {
-  const [udiText, setUdiText] = useState(String(REFERENCE_SHEET.udiValue));
-  const [daysText, setDaysText] = useState(String(REFERENCE_SHEET.days));
-  const [referenceFilter, setReferenceFilter] = useState<"all" | SavingsOption["validationStatus"]>("all");
-  const udiValue = parseReferenceNumber(udiText, REFERENCE_SHEET.udiValue, 0.000001, 100);
-  const days = Math.round(parseReferenceNumber(daysText, REFERENCE_SHEET.days, 1, 365));
-  const validation = calculateReferenceValidation(udiValue, days);
-  const visibleOptions = referenceFilter === "all" ? SAVINGS_OPTIONS : SAVINGS_OPTIONS.filter((option) => option.validationStatus === referenceFilter);
-  const initialOptions = visibleOptions.filter((option) => option.group === "initial");
-  const otherOptions = visibleOptions.filter((option) => option.group === "other");
-
-  const renderOption = (option: SavingsOption) => {
-    const displayedRate = option.currentRate ?? option.annualRate;
-    const protectionAmount = option.validatedProtection === "ipab"
-      ? validation.ipabProtection
-      : option.validatedProtection === "prosofipo" ? validation.prosofipoProtection : null;
-    const hasRateCorrection = option.currentRate !== undefined && option.annualRate !== option.currentRate;
-    const hasProtectionCorrection = option.sheetProtection !== option.validatedProtection;
-
-    return (
-      <article className={`reference-option-card status-${option.validationStatus}`} key={option.id}>
-        <div className="reference-option-head">
-          <h4>{option.name}</h4>
-          <span className={`reference-status ${option.validationStatus}`}>{validationLabel(option.validationStatus)}</span>
-        </div>
-        <div className="reference-option-metrics">
-          <div><span>Tasa anual</span><strong>{displayedRate === null ? "—" : `${displayedRate.toFixed(2)}%`}</strong>{hasRateCorrection && <small>Hoja: {option.annualRate!.toFixed(2)}%</small>}</div>
-          <div><span>Tope de la hoja</span><strong>{option.capText}</strong></div>
-          <div><span>Protección validada</span><strong>{protectionLabel(option.validatedProtection)}</strong>{protectionAmount !== null && <small>{formatPreciseMoney(protectionAmount)}</small>}</div>
-        </div>
-        {option.invested !== null && <div className="reference-option-report"><span>Captura · {REFERENCE_SHEET.days} días</span><strong>{option.reportedInterest === null ? "—" : formatPreciseMoney(option.reportedInterest)}</strong><small>ISR de hoja: {option.reportedTax === null ? "—" : formatPreciseMoney(option.reportedTax)}</small></div>}
-        <p className="reference-option-requirement"><strong>Requisito</strong>{option.requirement}</p>
-        <p className="reference-option-note">{option.validationNote}{hasProtectionCorrection && ` La hoja marca ${protectionLabel(option.sheetProtection)}.`}</p>
-        <a className="reference-option-source" href={option.sourceUrl} target="_blank" rel="noreferrer">Fuente: {option.sourceLabel}<span aria-hidden="true">↗</span></a>
-      </article>
-    );
-  };
-
-  return (
-    <section className="panel reference-options-panel">
-      <details data-disclosure-group="plan" onToggle={(event) => { if (event.currentTarget.open) onOpen?.(); }}>
-        <summary className="reference-options-summary">
-          <span className="reference-summary-copy"><span className="eyebrow">CATÁLOGO DE AHORRO</span><strong>Opciones, tasas y protección</strong><small>{SAVINGS_OPTIONS.length} opciones · datos de la hoja con revisión de fuentes</small></span>
-          <span className="reference-summary-mark" aria-hidden="true">+</span>
-        </summary>
-        <div className="reference-options-body">
-          <div className="reference-review-note">
-            <span className="reference-review-icon" aria-hidden="true">i</span>
-            <p><strong>Qué está validado</strong> Los límites de IPAB y Fondo de Protección, las conversiones de UDI y los totales de la hoja se revisan aquí. Las tasas, promociones y requisitos cambian; una marca “Parcial” o “Revisar” no debe usarse como confirmación contractual.</p>
-          </div>
-
-          <div className="reference-controls">
-            <label><span>Plazo de cálculo</span><div className="reference-input"><input type="text" inputMode="numeric" value={daysText} onChange={(event) => setDaysText(event.target.value)} onBlur={() => setDaysText(String(days))} /><b>días</b></div></label>
-            <label><span>UDI de referencia <small>editable</small></span><div className="reference-input"><input type="text" inputMode="decimal" value={udiText} onChange={(event) => setUdiText(event.target.value)} onBlur={() => setUdiText(udiValue.toFixed(6))} /><b>MXN</b></div></label>
-          </div>
-
-          <div className="reference-status-filters" role="group" aria-label="Filtrar catálogo por estado"><span>Mostrar</span><div>{(["all", "verified", "partial", "review"] as const).map((filter) => <button type="button" key={filter} className={referenceFilter === filter ? "active" : ""} aria-pressed={referenceFilter === filter} onClick={() => setReferenceFilter(filter)}>{filter === "all" ? `Todas (${SAVINGS_OPTIONS.length})` : filter === "verified" ? "Confirmadas" : filter === "partial" ? "Parciales" : "Revisar"}</button>)}</div></div>
-
-          <div className="reference-validation-grid" aria-label="Validación de la hoja">
-            <article><span>Inversión total</span><strong>{formatMoney(validation.investedTotal)}</strong><small>Suma de las filas iniciales</small></article>
-            <article><span>Tasa ponderada</span><strong>{validation.weightedRate.toFixed(2)}%</strong><small>Coincide con la hoja: {REFERENCE_SHEET.reportedWeightedRate.toFixed(2)}%</small></article>
-            <article><span>Rendimiento reportado</span><strong>{formatPreciseMoney(REFERENCE_SHEET.reportedInterestTotal)}</strong><small>Filas suman {formatPreciseMoney(validation.rowInterestTotal)} · diferencia {formatPreciseMoney(validation.rowTotalDifference)}</small></article>
-            <article><span>ISR reportado</span><strong>{formatPreciseMoney(REFERENCE_SHEET.reportedTaxTotal)}</strong><small>Filas suman {formatPreciseMoney(validation.rowTaxTotal)}</small></article>
-            <article className={Math.abs(validation.simpleInterestDifference) > 0.01 ? "is-warning" : ""}><span>Fórmula simple 365</span><strong>{formatPreciseMoney(validation.simpleInterestTotal)}</strong><small>{days} días · diferencia contra la hoja {formatPreciseMoney(validation.simpleInterestDifference)}</small></article>
-          </div>
-
-          <div className="reference-protection-grid">
-            <article><span>25,000 UDI · PROSOFIPO</span><strong>{formatPreciseMoney(validation.prosofipoProtection)}</strong><small>Fondo de Protección, si la entidad está autorizada y participa.</small></article>
-            <article><span>400,000 UDI · IPAB</span><strong>{formatPreciseMoney(validation.ipabProtection)}</strong><small>Por persona y por institución, sujeto a operaciones garantizadas.</small></article>
-          </div>
-
-          <div className="reference-source-strip"><span>Fuentes marco:</span><a href="https://www.gob.mx/ipab" target="_blank" rel="noreferrer">IPAB</a><a href="https://www.fondodeproteccion.mx/" target="_blank" rel="noreferrer">Fondo de Protección</a><a href="https://www.banxico.org.mx/SieInternet/consultarDirectorioInternetAction.do?accion=consultarCuadro&idCuadro=CP150&sector=8&locale=es" target="_blank" rel="noreferrer">Banxico · UDI</a><span>Revisado 18 ago 2026</span></div>
-
-          {visibleOptions.length === 0 && <EmptyState icon="⌕" title="No hay opciones con este estado" description="Elige otro filtro para volver a ver el catálogo." />}
-          {initialOptions.length > 0 && <div className="reference-option-group">
-            <div className="reference-group-heading"><div><span className="eyebrow">CAPTURA PRINCIPAL</span><h3>Opciones iniciales</h3></div><span>{initialOptions.length} opciones</span></div>
-            <div className="reference-option-grid">{initialOptions.map(renderOption)}</div>
-          </div>}
-          {otherOptions.length > 0 && <div className="reference-option-group">
-            <div className="reference-group-heading"><div><span className="eyebrow">ALTERNATIVAS</span><h3>Otras opciones</h3></div><span>{otherOptions.length} opciones</span></div>
-            <div className="reference-option-grid">{otherOptions.map(renderOption)}</div>
-          </div>}
-
-          <p className="reference-maintenance-note">Para actualizar el catálogo de forma permanente, edita únicamente <code>app/lib/savings-options.ts</code>. El UDI también se puede ajustar aquí para recalcular los límites en pesos sin tocar el código.</p>
-        </div>
-      </details>
-    </section>
-  );
 }
 
 function GoalRing({ progress }: { progress: number }) {
   return (
     <div className="goal-ring" role="progressbar" aria-label="Progreso de la meta de reserva" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} style={{ "--progress": `${progress * 3.6}deg` } as CSSProperties}>
-      <div><strong>{progress}%</strong><span>completado</span></div>
+      <div><strong>{progress}%</strong></div>
     </div>
   );
 }
 
 type CashflowPoint = { key: string; label: string; income: number; expense: number };
+type ExpenseCategoryPoint = { label: string; value: number; percentage: number; color: string };
 type TransactionMonthGroup = { key: string; label: string; transactions: Transaction[]; income: number; expense: number };
 type ProjectionLineKey = "reserve" | "gbm" | "realTotal";
+
+const EXPENSE_CATEGORY_COLORS = [
+  "var(--chart-category-1)",
+  "var(--chart-category-2)",
+  "var(--chart-category-3)",
+  "var(--chart-category-4)",
+  "var(--chart-category-5)",
+] as const;
 
 function CashflowChart({ data }: { data: CashflowPoint[] }) {
   const maxValue = Math.max(1, ...data.flatMap((point) => [point.income, point.expense]));
@@ -897,6 +839,43 @@ function CashflowChart({ data }: { data: CashflowPoint[] }) {
               <span className="expense-bar" style={{ height: `${Math.max(3, (point.expense / maxValue) * 100)}%` }} />
             </div>
             <small>{point.label}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExpenseCategoryChart({ data }: { data: ExpenseCategoryPoint[] }) {
+  if (data.length === 0) {
+    return <div className="expense-category-empty">Aún no hay gastos categorizados en este mes.</div>;
+  }
+
+  const size = 200;
+  const center = size / 2;
+  const radius = 68;
+  const stroke = 25;
+  const circumference = 2 * Math.PI * radius;
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <div className="expense-category-layout">
+      <div className="expense-category-visual">
+        <svg className="expense-category-donut" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Porcentaje de gastos por categoría">
+          <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--surface-soft)" strokeWidth={stroke} />
+          {data.map((item, index) => {
+            const length = (item.value / total) * circumference;
+            const offset = data.slice(0, index).reduce((sum, point) => sum + (point.value / total) * circumference, 0);
+            return <circle key={item.label} cx={center} cy={center} r={radius} fill="none" stroke={item.color} strokeWidth={stroke} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} />;
+          })}
+        </svg>
+        <div className="expense-category-center" aria-hidden="true"><strong>{formatMoney(total)}</strong><span>gastos</span></div>
+      </div>
+      <div className="expense-category-legend" aria-label="Gastos agrupados por categoría">
+        {data.map((item) => (
+          <div className="expense-category-item" key={item.label}>
+            <span className="expense-category-label"><i style={{ background: item.color }} />{item.label}</span>
+            <span className="expense-category-value"><strong>{item.percentage.toLocaleString("es-MX", { maximumFractionDigits: 1 })}%</strong><small>{formatMoney(item.value)}</small></span>
           </div>
         ))}
       </div>
@@ -932,9 +911,9 @@ function ProjectionChart({
   const chartFrameRef = useRef<HTMLDivElement>(null);
   const compactChart = frameWidth < 640;
   const lineDefinitions: Array<{ key: ProjectionLineKey; label: string; lineClass: string }> = [
-    { key: "reserve", label: "Reserva nominal", lineClass: "reserve-line" },
-    { key: "gbm", label: "Inversión nominal", lineClass: "gbm-line" },
-    { key: "realTotal", label: "Neto liquidable en pesos de hoy", lineClass: "real-line" },
+    { key: "reserve", label: "Reserva", lineClass: "reserve-line" },
+    { key: "gbm", label: "Inversión", lineClass: "gbm-line" },
+    { key: "realTotal", label: "Neto en pesos de hoy", lineClass: "real-line" },
   ];
   const activeLineKeys = lineDefinitions.filter((line) => visibleLines[line.key]).map((line) => line.key);
   const width = frameWidth;
@@ -953,7 +932,7 @@ function ProjectionChart({
     points.map((point, index) => `${index ? "L" : "M"} ${x(point.month).toFixed(2)} ${y(point[key]).toFixed(2)}`).join(" ");
   const hoveredPoint = hoveredMonth === null ? null : points[hoveredMonth];
   const labelStep = compactChart
-    ? years <= 5 ? 1 : years <= 12 ? 2 : years <= 20 ? 4 : 5
+    ? years <= 5 ? 2 : years <= 12 ? 2 : years <= 20 ? 4 : 5
     : years <= 10 ? 1 : years <= 20 ? 2 : 5;
   const xLabels = Array.from({ length: years + 1 }, (_, year) => year)
     .filter((year) => year === 0 || year === years || year % labelStep === 0)
@@ -1009,7 +988,7 @@ function ProjectionChart({
   return (
     <div className="chart-shell">
       <div className="chart-legend" aria-label="Líneas visibles de la proyección">
-        {lineDefinitions.map((line) => <button type="button" key={line.key} className={`chart-legend-toggle${visibleLines[line.key] ? " is-active" : ""}`} aria-pressed={visibleLines[line.key]} onClick={() => toggleLine(line.key)}><i className={`legend-line ${line.lineClass}`} /><span>{line.label}<b>{formatMoney(points.at(-1)![line.key])}</b></span></button>)}
+        {lineDefinitions.map((line) => <button type="button" key={line.key} className={`chart-legend-toggle${visibleLines[line.key] ? " is-active" : ""}`} aria-pressed={visibleLines[line.key]} onClick={() => toggleLine(line.key)}><i className={`legend-line ${line.lineClass}`} /><span>{line.label}</span></button>)}
         {goalMonth && <span><i className="legend-marker" /> Meta en {formatDurationMonths(goalMonth)}</span>}
       </div>
       <div className="chart-frame" ref={chartFrameRef}>
@@ -1048,7 +1027,7 @@ function ProjectionChart({
             <b>{hoveredPoint.month === 0 ? "Hoy" : monthLabelForIndex(hoveredPoint.month, baseDate)}</b>
             {visibleLines.reserve && <span><i className="tooltip-dot reserve" /> Reserva nominal {formatMoney(hoveredPoint.reserve)}</span>}
             {visibleLines.gbm && <span><i className="tooltip-dot investment" /> Inversión nominal {formatMoney(hoveredPoint.gbm)}</span>}
-            {visibleLines.realTotal && <span><i className="tooltip-dot real" /> Neto liquidable en pesos de hoy {formatMoney(hoveredPoint.realTotal)}</span>}
+            {visibleLines.realTotal && <span><i className="tooltip-dot real" /> Neto en pesos de hoy {formatMoney(hoveredPoint.realTotal)}</span>}
             <small>Total antes de salida {formatMoney(hoveredPoint.reserve + hoveredPoint.gbm)}</small>
           </div>
         )}
@@ -1137,6 +1116,11 @@ export default function Home() {
   const [years, setYears] = useState(DEFAULT_YEARS);
   const [targetText, setTargetText] = useState(formatNumberInput(DEFAULT_TARGET));
   const [monthlyExpensesText, setMonthlyExpensesText] = useState(formatNumberInput(DEFAULT_MONTHLY_EXPENSES));
+  const [goalEditorOpen, setGoalEditorOpen] = useState(false);
+  const [goalEditorDraft, setGoalEditorDraft] = useState({
+    targetText: formatNumberInput(DEFAULT_TARGET),
+    monthlyExpensesText: formatNumberInput(DEFAULT_MONTHLY_EXPENSES),
+  });
   const [reserveRateText, setReserveRateText] = useState(String(RESERVE_RETURN));
   const [gbmRateText, setGbmRateText] = useState(String(GBM_RETURN));
   const [inflationRateText, setInflationRateText] = useState(String(DEFAULT_INFLATION));
@@ -1144,14 +1128,15 @@ export default function Home() {
   const [capitalGainsTaxText, setCapitalGainsTaxText] = useState(String(CAPITAL_GAINS_TAX));
   const [extras, setExtras] = useState<ExtraIncome[]>(() => createExampleExtras(today));
   const [extraDraft, setExtraDraft] = useState<ExtraIncome | null>(null);
-  const [editingExtraId, setEditingExtraId] = useState<number | null>(null);
   const [creatingExtra, setCreatingExtra] = useState(false);
+  const [extraEditorOpen, setExtraEditorOpen] = useState(false);
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [advancedPlanOpen, setAdvancedPlanOpen] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>(() => createExampleEvents(today));
   const [transactions, setTransactions] = useState<Transaction[]>(() => createExampleTransactions(today));
   const [categories, setCategories] = useState<TransactionCategory[]>(() => DEFAULT_TRANSACTION_CATEGORIES.map((category) => ({ ...category })));
   const [transactionEditorOpen, setTransactionEditorOpen] = useState(false);
+  const [transactionKindLocked, setTransactionKindLocked] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [transactionDraft, setTransactionDraft] = useState<TransactionDraft>(() => ({
     date: toIsoDate(today),
@@ -1169,11 +1154,7 @@ export default function Home() {
   const [activityCategory, setActivityCategory] = useState("all");
   const [activitySearch, setActivitySearch] = useState("");
   const [activityMonth, setActivityMonth] = useState(() => monthKeyFromDate(today));
-  const [activityFiltersOpen, setActivityFiltersOpen] = useState(false);
-  const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
-  const [categoryDraftName, setCategoryDraftName] = useState("");
-  const [categoryDraftIcon, setCategoryDraftIcon] = useState<CategoryIconName>("general");
-  const [categoryError, setCategoryError] = useState("");
+  const [activityLocationReady, setActivityLocationReady] = useState(false);
   const [plannedMovementsOpen, setPlannedMovementsOpen] = useState(false);
   const [eventEditorOpen, setEventEditorOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
@@ -1198,17 +1179,26 @@ export default function Home() {
   const [confirmationAction, setConfirmationAction] = useState<ConfirmationAction | null>(null);
   const closeEditorButtonRef = useRef<HTMLButtonElement>(null);
   const closeTransactionButtonRef = useRef<HTMLButtonElement>(null);
+  const closeEventButtonRef = useRef<HTMLButtonElement>(null);
   const transactionAmountRef = useRef<HTMLInputElement>(null);
   const closeConfirmationButtonRef = useRef<HTMLButtonElement>(null);
+  const closeGoalButtonRef = useRef<HTMLButtonElement>(null);
+  const closeExtraButtonRef = useRef<HTMLButtonElement>(null);
   const editorModalRef = useRef<HTMLElement>(null);
   const transactionModalRef = useRef<HTMLElement>(null);
+  const eventModalRef = useRef<HTMLElement>(null);
   const confirmationModalRef = useRef<HTMLElement>(null);
+  const goalModalRef = useRef<HTMLElement>(null);
+  const extraModalRef = useRef<HTMLElement>(null);
   const editorTriggerRef = useRef<HTMLElement | null>(null);
   const transactionTriggerRef = useRef<HTMLElement | null>(null);
+  const eventTriggerRef = useRef<HTMLElement | null>(null);
   const confirmationTriggerRef = useRef<HTMLElement | null>(null);
+  const goalTriggerRef = useRef<HTMLElement | null>(null);
+  const extraTriggerRef = useRef<HTMLElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const extrasCardRef = useRef<HTMLDivElement>(null);
-  const plannedMovementsRef = useRef<HTMLDivElement>(null);
+  const advancedPlanRef = useRef<HTMLElement>(null);
   const themeResolvedRef = useRef(false);
   const storageWarningShownRef = useRef(false);
   const lastAnnouncedViewRef = useRef<AppView | null>(null);
@@ -1217,10 +1207,12 @@ export default function Home() {
   const reserve = selectedTotal(accounts, emergencyIds);
   const gbm = sumAccounts(accounts, "investment");
   const cash = sumAccounts(accounts, "cash");
+  const availableAccounts = accounts.filter((account) => account.group === "cash");
+  const availableBalanceNotice = availableAccounts.length === 1
+    ? `Cuenta disponible · ${availableAccounts[0].label}: ${formatMoney(cash)}. Se mantiene líquida para tu día a día y no entra en la proyección.`
+    : `Saldo disponible · ${formatMoney(cash)} en ${availableAccounts.length} cuentas. Se mantiene líquido para tu día a día y no entra en la proyección.`;
   const target = Math.max(1, parseMoneyInput(targetText) || DEFAULT_TARGET);
   const monthlyExpenses = Math.max(0, parseMoneyInput(monthlyExpensesText));
-  const recommendedTargetMin = monthlyExpenses * 3;
-  const recommendedTargetMax = monthlyExpenses * 6;
   const coverageMonths = monthlyExpenses > 0 ? reserve / monthlyExpenses : null;
   const reserveRate = sanitizeReturnRate(reserveRateText);
   const gbmRate = sanitizeReturnRate(gbmRateText);
@@ -1249,21 +1241,30 @@ export default function Home() {
   );
   const lastNominalPoint = projection.points.at(-1)!;
   const lastComparisonPoint = comparisonPoints.at(-1)!;
-  const lastGrossNominalTotal = lastNominalPoint.reserve + lastNominalPoint.gbm;
   const lastNominalTotal = lastNominalPoint.netTotal;
-  const inflationImpact = Math.max(0, lastNominalTotal - lastComparisonPoint.realTotal);
   const projectedStartingTotal = reserve + gbm;
   const estimatedReturn = lastNominalTotal - projectedStartingTotal - projection.netContributions;
   const visibleEvents = useMemo(() => getEventOccurrences(events, calendarMonth), [events, calendarMonth]);
-  const annualProjectionPoints = comparisonPoints.filter((point) => point.month === 0 || point.month % 12 === 0 || point.month === years * 12);
   const selectedDraftAccount = draftAccounts.find((account) => account.id === selectedDraftAccountId) ?? draftAccounts[0] ?? null;
   const currentMonthKey = monthKeyFromDate(today);
   const currentMonthTransactions = transactions.filter((transaction) => transaction.date.startsWith(currentMonthKey));
   const monthIncome = currentMonthTransactions.filter((transaction) => transaction.kind === "income").reduce((sum, transaction) => sum + transaction.amount, 0);
   const monthExpense = currentMonthTransactions.filter((transaction) => transaction.kind === "expense").reduce((sum, transaction) => sum + transaction.amount, 0);
   const monthNet = monthIncome - monthExpense;
-  const savingsRate = monthIncome > 0 ? Math.max(-100, Math.min(100, (monthNet / monthIncome) * 100)) : null;
-  const reserveGap = Math.max(0, target - reserve);
+  const expenseCategoryData = useMemo<ExpenseCategoryPoint[]>(() => {
+    const totals = new Map<string, number>();
+    currentMonthTransactions
+      .filter((transaction) => transaction.kind === "expense")
+      .forEach((transaction) => totals.set(transaction.category, (totals.get(transaction.category) ?? 0) + transaction.amount));
+    const ordered = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+    const total = ordered.reduce((sum, [, value]) => sum + value, 0);
+    return ordered.map(([label, value], index) => ({
+      label,
+      value,
+      percentage: total > 0 ? (value / total) * 100 : 0,
+      color: EXPENSE_CATEGORY_COLORS[index % EXPENSE_CATEGORY_COLORS.length],
+    }));
+  }, [currentMonthTransactions]);
   const deferredActivitySearch = useDeferredValue(activitySearch);
   const activityMonthOptions = useMemo(() => {
     const transactionMonths = transactions.map((transaction) => transaction.date.slice(0, 7));
@@ -1341,7 +1342,18 @@ export default function Home() {
       : reserveRate === 8 && gbmRate === 11 && inflationRate === 3.5
         ? "Optimista"
         : "Personalizado";
-  const transactionStep = transactionDraft.amount <= 0 ? 1 : transactionDraft.title.trim() && transactionDraft.date && transactionDraft.accountId ? 3 : 2;
+  const transactionFormTitle = editingTransactionId
+    ? "Ajusta el movimiento"
+    : transactionDraft.kind === "income"
+      ? "Nuevo ingreso"
+      : transactionDraft.kind === "transfer"
+        ? "Nueva transferencia"
+        : "Nuevo gasto";
+  const transactionAmountLabel = transactionDraft.kind === "income"
+    ? "Valor del ingreso"
+    : transactionDraft.kind === "transfer"
+      ? "Valor de la transferencia"
+      : "Cantidad de gastos";
   const draftAccountsChanged = useMemo(() => {
     const cleanAccounts = (items: Account[]) => items.map((account) => ({ id: account.id, label: account.label.trim(), amount: account.amount, rate: account.rate.trim(), group: account.group, note: account.note.trim() }));
     return JSON.stringify(cleanAccounts(draftAccounts)) !== JSON.stringify(cleanAccounts(accounts))
@@ -1376,11 +1388,44 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const syncViewFromLocation = () => setActiveView(viewFromLocation());
-    syncViewFromLocation();
-    window.addEventListener("popstate", syncViewFromLocation);
-    return () => window.removeEventListener("popstate", syncViewFromLocation);
-  }, []);
+    const syncLocationState = () => {
+      const url = new URL(window.location.href);
+      const nextView = viewFromLocation();
+      setActivityLocationReady(false);
+      if (nextView !== activeView) {
+        setPlannedMovementsOpen(false);
+        closeEventEditor();
+      }
+      setActiveView(nextView);
+      setActivityFilter(activityFilterFromLocation(url.searchParams.get("kind")));
+      setActivityCategory(url.searchParams.get("category") || "all");
+      setActivitySearch(url.searchParams.get("q") || "");
+      setActivityMonth(activityMonthFromLocation(url.searchParams.get("month"), monthKeyFromDate(today)));
+      setActivityLocationReady(true);
+    };
+    syncLocationState();
+    window.addEventListener("popstate", syncLocationState);
+    return () => window.removeEventListener("popstate", syncLocationState);
+  }, [activeView, today]);
+
+  useEffect(() => {
+    if (!activityLocationReady || activeView !== "activity") return;
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    const nextValues: Array<[string, string, string]> = [
+      ["q", activitySearch.trim(), ""],
+      ["kind", activityFilter, "all"],
+      ["category", activityCategory, "all"],
+      ["month", activityMonth, monthKeyFromDate(today)],
+    ];
+    nextValues.forEach(([key, value, defaultValue]) => {
+      if (!value || value === defaultValue) params.delete(key);
+      else params.set(key, value);
+    });
+    const nextUrl = `${url.pathname}${params.toString() ? `?${params.toString()}` : ""}${url.hash}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) window.history.replaceState({}, "", nextUrl);
+  }, [activeView, activityCategory, activityFilter, activityLocationReady, activityMonth, activitySearch, today]);
 
   useEffect(() => {
     if (lastAnnouncedViewRef.current === null) {
@@ -1537,6 +1582,57 @@ export default function Home() {
   }, [transactionEditorOpen]);
 
   useEffect(() => {
+    if (!eventEditorOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeEventEditor();
+      trapFocusInModal(event, eventModalRef.current);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    closeEventButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      if (eventTriggerRef.current?.isConnected) eventTriggerRef.current.focus();
+    };
+  }, [eventEditorOpen]);
+
+  useEffect(() => {
+    if (!goalEditorOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setGoalEditorOpen(false);
+      trapFocusInModal(event, goalModalRef.current);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    closeGoalButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      if (goalTriggerRef.current?.isConnected) goalTriggerRef.current.focus();
+    };
+  }, [goalEditorOpen]);
+
+  useEffect(() => {
+    if (!extraEditorOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancelExtraEdit();
+      trapFocusInModal(event, extraModalRef.current);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    closeExtraButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      if (extraTriggerRef.current?.isConnected) extraTriggerRef.current.focus();
+    };
+  }, [extraEditorOpen]);
+
+  useEffect(() => {
     if (!confirmationAction) return;
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1559,7 +1655,25 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  function openGoalEditor() {
+    closeInfoTips();
+    goalTriggerRef.current = document.activeElement as HTMLElement | null;
+    setGoalEditorDraft({ targetText, monthlyExpensesText });
+    setGoalEditorOpen(true);
+  }
+
+  function saveGoalEditor() {
+    const parsedTarget = parseMoneyInput(goalEditorDraft.targetText);
+    const parsedMonthlyExpenses = parseMoneyInput(goalEditorDraft.monthlyExpensesText);
+    setTargetText(formatNumberInput(Math.max(1, parsedTarget || target)));
+    setMonthlyExpensesText(formatNumberInput(Math.max(0, parsedMonthlyExpenses)));
+    markDataPersonal();
+    setGoalEditorOpen(false);
+    showToast("Meta del fondo de emergencia actualizada.");
+  }
+
   function openEditor() {
+    closeInfoTips();
     editorTriggerRef.current = document.activeElement as HTMLElement | null;
     setDraftAccounts(accounts.map((account) => ({ ...account, amountText: formatNumberInput(account.amount) })));
     setDraftEmergencyIds([...emergencyIds]);
@@ -1579,6 +1693,7 @@ export default function Home() {
   }
 
   function startPersonalSetup() {
+    closeInfoTips();
     const starterAccounts: Account[] = [{
       id: createClientId("personal-main"),
       label: "Cuenta principal",
@@ -1625,57 +1740,40 @@ export default function Home() {
     };
   }
 
-  function openNewTransaction(kind: TransactionKind = "expense", destinationId?: string) {
+  function openNewTransaction(kind: TransactionKind = "expense", destinationId?: string, lockKind = false) {
+    closeInfoTips();
     transactionTriggerRef.current = document.activeElement as HTMLElement | null;
     setEditingTransactionId(null);
+    setTransactionKindLocked(lockKind);
     setTransactionDraft(newTransactionDraft(kind, destinationId));
     setTransactionError("");
-    setCategoryEditorOpen(false);
-    setCategoryError("");
     setTransactionEditorOpen(true);
+  }
+
+  function openEmergencyContribution() {
+    const destination = accounts.find((account) => emergencyIds.includes(account.id));
+    if (!destination) {
+      showToast("Agrega una cuenta de reserva antes de aportar.", "warning");
+      return;
+    }
+    openNewTransaction("transfer", destination.id, true);
+    setTransactionDraft((current) => ({ ...current, title: "Aportación al fondo", category: "Ahorro" }));
   }
 
   function openTransactionEditor(transaction: Transaction) {
+    closeInfoTips();
     transactionTriggerRef.current = document.activeElement as HTMLElement | null;
     setEditingTransactionId(transaction.id);
+    setTransactionKindLocked(true);
     setTransactionDraft({ ...transaction, amountText: formatTransactionInput(transaction.amount) });
     setTransactionError("");
-    setCategoryEditorOpen(false);
-    setCategoryError("");
     setTransactionEditorOpen(true);
-  }
-
-  function openCategoryCreator() {
-    setCategoryDraftName("");
-    setCategoryDraftIcon("general");
-    setCategoryError("");
-    setCategoryEditorOpen(true);
-  }
-
-  function saveCategory() {
-    const label = categoryDraftName.trim();
-    if (!label) {
-      setCategoryError("Escribe un nombre para la categoría.");
-      return;
-    }
-    if (categories.some((category) => category.label.toLocaleLowerCase("es-MX") === label.toLocaleLowerCase("es-MX"))) {
-      setCategoryError("Ya existe una categoría con ese nombre.");
-      return;
-    }
-    const category: TransactionCategory = { id: createClientId("category"), label, icon: categoryDraftIcon, custom: true };
-    setCategories((current) => [...current, category]);
-    setTransactionDraft((current) => ({ ...current, category: label }));
-    setCategoryEditorOpen(false);
-    setCategoryError("");
-    markDataPersonal();
-    showToast(`Categoría “${label}” creada.`);
   }
 
   function clearActivityFilters() {
     setActivityFilter("all");
     setActivityCategory("all");
     setActivitySearch("");
-    setActivityFiltersOpen(false);
   }
 
   function adjustAccountsForTransaction(current: Account[], transaction: Pick<Transaction, "kind" | "amount" | "accountId" | "toAccountId">, direction: 1 | -1) {
@@ -1732,6 +1830,7 @@ export default function Home() {
   }
 
   function removeTransaction(transaction: Transaction) {
+    closeInfoTips();
     const reversedAccounts = adjustAccountsForTransaction(accounts, transaction, -1);
     if (reversedAccounts.some((account) => account.amount < 0)) {
       showToast("No se puede revertir este ingreso porque la cuenta ya no tiene saldo suficiente.", "warning");
@@ -1832,21 +1931,22 @@ export default function Home() {
       monthOfYear: today.getMonth() + 1,
       oneTimeMonth: 1,
     });
-    setEditingExtraId(id);
     setCreatingExtra(true);
-    setExtrasOpen(true);
   }
 
   function startExtraCreation() {
+    closeInfoTips();
+    extraTriggerRef.current = document.activeElement as HTMLElement | null;
     addExtra();
-    window.requestAnimationFrame(() => extrasCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    setExtraEditorOpen(true);
   }
 
   function editExtra(item: ExtraIncome) {
+    closeInfoTips();
+    extraTriggerRef.current = document.activeElement as HTMLElement | null;
     setExtraDraft({ ...item, amountText: formatNumberInput(item.amount) });
-    setEditingExtraId(item.id);
     setCreatingExtra(false);
-    setExtrasOpen(true);
+    setExtraEditorOpen(true);
   }
 
   function updateExtraDraft(patch: Partial<ExtraIncome>) {
@@ -1855,8 +1955,8 @@ export default function Home() {
 
   function cancelExtraEdit() {
     setExtraDraft(null);
-    setEditingExtraId(null);
     setCreatingExtra(false);
+    setExtraEditorOpen(false);
   }
 
   function saveExtra() {
@@ -1875,21 +1975,22 @@ export default function Home() {
   }
 
   function openNewEvent() {
+    closeInfoTips();
+    eventTriggerRef.current = document.activeElement as HTMLElement | null;
     const sourceAccount = accounts.find((account) => account.group === "cash") ?? accounts[0];
     const destinationAccount = accounts.find((account) => account.id !== sourceAccount?.id);
     setEditingEventId(null);
     setEventError("");
     setEventDraft({ ...createEventDraft(today, sourceAccount?.id ?? ""), toAccountId: destinationAccount?.id ?? null });
-    setPlannedMovementsOpen(true);
     setEventEditorOpen(true);
   }
 
   function startPlannedMovement() {
     openNewEvent();
-    window.requestAnimationFrame(() => plannedMovementsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function editEvent(id: number) {
+    closeInfoTips();
     const event = events.find((item) => item.id === id);
     if (!event) return;
     const sourceAccount = accounts.find((account) => account.group === "cash") ?? accounts[0];
@@ -1902,8 +2003,14 @@ export default function Home() {
       accountId: event.accountId || sourceAccount?.id || "",
       toAccountId: event.toAccountId ?? (event.kind === "contribution" || event.kind === "transfer" ? destinationAccount?.id ?? null : null),
     });
-    setPlannedMovementsOpen(true);
+    eventTriggerRef.current = document.activeElement as HTMLElement | null;
     setEventEditorOpen(true);
+  }
+
+  function closeEventEditor() {
+    setEventEditorOpen(false);
+    setEditingEventId(null);
+    setEventError("");
   }
 
   function saveEvent() {
@@ -2043,6 +2150,15 @@ export default function Home() {
     return `${formatMoney(item.amount)} al mes desde ${monthLabelForIndex(item.startMonth, today)}, ${end}, a ${destination}`;
   }
 
+  function describeExtraSchedule(item: ExtraIncome) {
+    const destination = item.destination === "gbm" ? "Inversión" : "Reserva";
+    if (!item.enabled) return "Desactivado";
+    if (!item.recurring) return `Una sola vez · ${monthLabelForIndex(item.oneTimeMonth, today)} · ${destination}`;
+    if (item.frequency === "annual") return `Anual · ${monthNames[item.monthOfYear - 1]} · ${destination}`;
+    const end = item.endMonth === null ? "sin fecha final" : `hasta ${monthLabelForIndex(item.endMonth, today)}`;
+    return `Mensual · desde ${monthLabelForIndex(item.startMonth, today)} · ${end} · ${destination}`;
+  }
+
   function applyScenario(preset: "conservative" | "base" | "optimistic") {
     const values = preset === "conservative"
       ? { reserve: 5, gbm: 7, inflation: 5 }
@@ -2055,10 +2171,12 @@ export default function Home() {
   }
 
   function toggleAdvancedPlan() {
-    setAdvancedPlanOpen((current) => {
-      if (!current) setExtrasOpen(false);
-      return !current;
-    });
+    const nextOpen = !advancedPlanOpen;
+    setAdvancedPlanOpen(nextOpen);
+    if (nextOpen) {
+      setExtrasOpen(false);
+      window.requestAnimationFrame(() => advancedPlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
   }
 
   function toggleExtras() {
@@ -2125,6 +2243,7 @@ export default function Home() {
   }
 
   function resetToExampleData() {
+    closeInfoTips();
     confirmationTriggerRef.current = document.activeElement as HTMLElement | null;
     setConfirmationAction({ kind: "reset-example" });
   }
@@ -2176,8 +2295,8 @@ export default function Home() {
     setCapitalGainsTaxText(String(CAPITAL_GAINS_TAX));
     setExtras(createExampleExtras(today));
     setExtraDraft(null);
-    setEditingExtraId(null);
     setCreatingExtra(false);
+    setExtraEditorOpen(false);
     setEvents(createExampleEvents(today));
     setTransactions(createExampleTransactions(today));
     setTransactionEditorOpen(false);
@@ -2203,28 +2322,20 @@ export default function Home() {
     setBackupStatus("Datos restablecidos. La app usa nuevamente información ficticia y eliminó los datos anteriores de este navegador.");
   }
 
-  function renderExtraEditor(item: ExtraIncome, index: number) {
+  function renderExtraEditor(item: ExtraIncome, index: number, includeActions = true) {
     return (
-      <section className="extra-entry is-editing" key={`editor-${item.id}`} aria-labelledby={`extra-editor-${item.id}`}>
-        <div className="extra-editor-head">
-          <div>
-            <span className="editing-badge">{creatingExtra ? "NUEVO" : "EDITANDO"}</span>
-            <strong id={`extra-editor-${item.id}`}>{creatingExtra ? "Nuevo escenario" : `Escenario ${index + 1}`}</strong>
-            <small>Cambios sin guardar</small>
-          </div>
-          <label className="switch"><input aria-label="Incluir escenario en la proyección" type="checkbox" checked={item.enabled} onChange={(event) => updateExtraDraft({ enabled: event.target.checked })} /><span />Activo</label>
-        </div>
+      <section className="extra-entry is-editing extra-modal-entry" key={`editor-${item.id}`} aria-label="Formulario de escenario">
         <div className="extra-grid">
           <label>Monto<input type="text" inputMode="decimal" value={item.amountText ?? formatNumberInput(item.amount)} onChange={(event) => { const value = event.target.value; updateExtraDraft({ amountText: value, amount: parseMoneyInput(value) }); }} onBlur={() => updateExtraDraft({ amountText: formatNumberInput(item.amount) })} /></label>
-          <label>Repetición<select value={item.recurring ? "recurring" : "once"} onChange={(event) => updateExtraDraft({ recurring: event.target.value === "recurring" })}><option value="recurring">Recurrente</option><option value="once">Una sola vez</option></select></label>
-          {item.recurring && <label>Frecuencia<select value={item.frequency} onChange={(event) => updateExtraDraft({ frequency: event.target.value as ExtraIncome["frequency"] })}><option value="monthly">Mensual</option><option value="annual">Anual</option></select></label>}
+          <div className="picker-form-label"><span>Repetición</span><PickerField label="Repetición" value={item.recurring ? "recurring" : "once"} options={[{ value: "recurring", label: "Recurrente", description: "Se repite según la frecuencia elegida" }, { value: "once", label: "Una sola vez", description: "Solo se registra en el mes indicado" }]} onChange={(value) => updateExtraDraft({ recurring: value === "recurring" })} /></div>
+          {item.recurring && <div className="picker-form-label"><span>Frecuencia</span><PickerField label="Frecuencia" value={item.frequency} options={[{ value: "monthly", label: "Mensual", description: "Cada mes" }, { value: "annual", label: "Anual", description: "Una vez al año" }]} onChange={(value) => updateExtraDraft({ frequency: value as ExtraIncome["frequency"] })} /></div>}
           {item.recurring && item.frequency === "monthly" && <><label>Mes de inicio<input type="month" min={monthInputForIndex(1, today)} max={monthInputForIndex(MAX_YEARS * 12, today)} value={monthInputForIndex(item.startMonth, today)} onChange={(event) => { const startMonth = monthIndexFromInput(event.target.value, today); updateExtraDraft({ startMonth, endMonth: item.endMonth !== null && item.endMonth < startMonth ? startMonth : item.endMonth }); }} /></label><label>Mes final <span className="optional">opcional</span><input type="month" min={monthInputForIndex(item.startMonth, today)} max={monthInputForIndex(MAX_YEARS * 12, today)} value={item.endMonth === null ? "" : monthInputForIndex(item.endMonth, today)} onChange={(event) => updateExtraDraft({ endMonth: event.target.value ? monthIndexFromInput(event.target.value, today) : null })} /><small>Vacío = sin fecha final</small></label></>}
-          {item.recurring && item.frequency === "annual" && <label>Mes del año<select value={item.monthOfYear} onChange={(event) => updateExtraDraft({ monthOfYear: Number(event.target.value) })}>{monthNames.map((month, monthIndex) => <option key={month} value={monthIndex + 1}>{month}</option>)}</select></label>}
+          {item.recurring && item.frequency === "annual" && <div className="picker-form-label"><span>Mes del año</span><PickerField label="Mes del año" value={String(item.monthOfYear)} options={monthNames.map((month, monthIndex) => ({ value: String(monthIndex + 1), label: month }))} onChange={(value) => updateExtraDraft({ monthOfYear: Number(value) })} /></div>}
           {!item.recurring && <label>Mes del depósito<input type="month" min={monthInputForIndex(1, today)} max={monthInputForIndex(MAX_YEARS * 12, today)} value={monthInputForIndex(item.oneTimeMonth, today)} onChange={(event) => updateExtraDraft({ oneTimeMonth: monthIndexFromInput(event.target.value, today) })} /></label>}
-          <label>Destino<select value={item.destination} onChange={(event) => updateExtraDraft({ destination: event.target.value as ExtraIncome["destination"] })}><option value="gbm">Inversión</option><option value="cetes">CETES / reserva</option></select></label>
+          <div className="picker-form-label"><span>Destino</span><PickerField label="Destino de la aportación" value={item.destination} options={[{ value: "gbm", label: "Inversión", description: "Aporta al crecimiento proyectado" }, { value: "cetes", label: "CETES / reserva", description: "Aumenta tu fondo de reserva" }]} onChange={(value) => updateExtraDraft({ destination: value as ExtraIncome["destination"] })} /></div>
         </div>
         <p className="extra-summary">Vista previa: {describeExtra(item)}</p>
-        <div className="extra-editor-actions"><button type="button" className="secondary-button" onClick={cancelExtraEdit}>Cancelar</button><button type="button" className="primary-button" disabled={item.amount <= 0} onClick={saveExtra}>Guardar escenario</button></div>
+        {includeActions && <div className="extra-editor-actions"><button type="button" className="secondary-button" onClick={cancelExtraEdit}>Cancelar</button><button type="button" className="primary-button" disabled={item.amount <= 0} onClick={saveExtra}>Guardar escenario</button></div>}
       </section>
     );
   }
@@ -2237,25 +2348,7 @@ export default function Home() {
           <span className="planned-movements-mark" aria-hidden="true">{plannedMovementsOpen ? "−" : "+"}</span>
         </button>
         {plannedMovementsOpen && <div id="planned-movements-body" className="planned-movements-body">
-          <div className="planned-movements-intro"><p>Programa un movimiento y elige las cuentas que afectará. Cuando lo realices, pulsa “Aplicar” para llevarlo a Actividad y actualizar sus saldos.</p><button type="button" className={eventEditorOpen ? "secondary-button" : "primary-button"} onClick={() => { if (eventEditorOpen) { setEventEditorOpen(false); setEditingEventId(null); setEventError(""); } else { openNewEvent(); } }}>{eventEditorOpen ? "Cerrar formulario" : "+ Planear movimiento"}</button></div>
-          {eventEditorOpen && (
-            <div className="event-form panel">
-              <div className="event-form-head"><div><span className="editing-badge">{editingEventId === null ? "NUEVO" : "EDITANDO SERIE"}</span><strong>Configura el movimiento</strong></div><span>{eventDraft.recurrence === "none" ? "Una sola fecha" : recurrenceLabel(eventDraft.recurrence)}</span></div>
-              <div className="event-form-grid">
-                <label>Primera fecha<input type="date" value={eventDraft.date} onChange={(event) => setEventDraft((current) => ({ ...current, date: event.target.value, recurrenceEnd: current.recurrenceEnd && current.recurrenceEnd < event.target.value ? event.target.value : current.recurrenceEnd }))} /></label>
-                <label>Movimiento<input type="text" placeholder="Ej. Pagar tarjeta" value={eventDraft.title} onChange={(event) => setEventDraft((current) => ({ ...current, title: event.target.value }))} /></label>
-                <label>Tipo<select value={eventDraft.kind} onChange={(event) => { const kind = event.target.value as MovementKind; const requiresDestination = kind === "transfer" || kind === "contribution"; setEventDraft((current) => ({ ...current, kind, includeInProjection: kind === "transfer" ? false : current.includeInProjection, destination: kind === "transfer" ? "none" : current.destination, toAccountId: requiresDestination ? current.toAccountId ?? accounts.find((account) => account.id !== current.accountId)?.id ?? null : null })); }}><option value="expense">Gasto</option><option value="income">Ingreso</option><option value="transfer">Transferencia</option><option value="contribution">Aportación</option></select></label>
-                <label>Monto<input type="text" inputMode="decimal" placeholder="Ej. 2,500.00" value={eventDraft.amount} onChange={(event) => setEventDraft((current) => ({ ...current, amount: event.target.value, numericAmount: parseMoneyInput(event.target.value) }))} onBlur={() => setEventDraft((current) => ({ ...current, amount: formatTransactionInput(current.numericAmount) }))} /></label>
-                <label>Nota <span className="optional">opcional</span><input type="text" placeholder="Ej. Servicios del mes" value={eventDraft.detail} onChange={(event) => setEventDraft((current) => ({ ...current, detail: event.target.value }))} /></label>
-                <label>Repetición<select value={eventDraft.recurrence} onChange={(event) => setEventDraft((current) => ({ ...current, recurrence: event.target.value as EventRecurrence, recurrenceEnd: event.target.value === "none" ? null : current.recurrenceEnd }))}><option value="none">No se repite</option><option value="weekly">Cada semana</option><option value="monthly">Cada mes</option><option value="annual">Cada año</option></select></label>
-                {eventDraft.recurrence !== "none" && <label>Termina <span className="optional">opcional</span><input type="date" min={eventDraft.date} value={eventDraft.recurrenceEnd ?? ""} onChange={(event) => setEventDraft((current) => ({ ...current, recurrenceEnd: event.target.value || null }))} /><small>Vacío = sin fecha final</small></label>}
-                {eventDraft.kind !== "transfer" && <label>Destino en proyección<select value={eventDraft.destination} onChange={(event) => setEventDraft((current) => ({ ...current, destination: event.target.value as ProjectionDestination, includeInProjection: event.target.value !== "none" }))}><option value="none">No incluir</option><option value="cetes">Reserva / CETES</option><option value="gbm">Inversión</option></select></label>}
-                <label>{eventDraft.kind === "transfer" || eventDraft.kind === "contribution" ? "Desde" : "Cuenta que afectará"}<select aria-label="Cuenta que afectará" value={eventDraft.accountId} onChange={(event) => setEventDraft((current) => ({ ...current, accountId: event.target.value, toAccountId: current.toAccountId === event.target.value ? accounts.find((account) => account.id !== event.target.value)?.id ?? null : current.toAccountId }))}><option value="">Selecciona una cuenta</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>
-                {(eventDraft.kind === "transfer" || eventDraft.kind === "contribution") && <label>Hacia<select aria-label="Cuenta destino del movimiento planeado" value={eventDraft.toAccountId ?? ""} onChange={(event) => setEventDraft((current) => ({ ...current, toAccountId: event.target.value || null }))}><option value="">Selecciona destino</option>{accounts.filter((account) => account.id !== eventDraft.accountId).map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>}
-              </div>
-              <div className="event-form-actions"><small>{eventError || `${eventDraft.recurrence === "none" ? "Se agregará un solo movimiento." : `${recurrenceLabel(eventDraft.recurrence)} desde ${eventDraft.date}${eventDraft.recurrenceEnd ? ` hasta ${eventDraft.recurrenceEnd}` : ", sin fecha final"}.`}${eventDraft.includeInProjection ? " Su monto se reflejará en la proyección." : ""}`}</small><button type="button" className="primary-button" disabled={!eventDraft.title.trim() || !eventDraft.date} onClick={saveEvent}>{editingEventId === null ? "Guardar movimiento" : "Guardar cambios"}</button></div>
-            </div>
-          )}
+          <div className="planned-movements-intro"><p>Programa un movimiento y elige las cuentas que afectará. El formulario se abrirá en una ventana para que puedas concentrarte en completarlo.</p><button type="button" className="primary-button" onClick={openNewEvent}>+ Planear movimiento</button></div>
           {removedEvent && <div className="undo-banner" role="status"><span>Movimiento eliminado.</span><button type="button" onClick={undoEventRemoval}>Deshacer</button><button type="button" aria-label="Cerrar aviso" onClick={() => setRemovedEvent(null)}>×</button></div>}
           <div className="agenda-grid">
             <div className="events-card">
@@ -2291,6 +2384,33 @@ export default function Home() {
     );
   }
 
+  function renderEventEditor() {
+    if (!eventEditorOpen) return null;
+    return (
+      <ModalShell ref={eventModalRef} className="transaction-modal event-editor-modal" backdropClassName="transaction-backdrop" labelledBy="event-editor-title" onBackdropClick={(event) => { if (event.target === event.currentTarget) closeEventEditor(); }}>
+        <div className="editor-heading transaction-modal-heading">
+          <div><span className="eyebrow">MOVIMIENTO PLANEADO</span><h2 id="event-editor-title">{editingEventId === null ? "Planear movimiento" : "Editar movimiento planeado"}</h2></div>
+          <button type="button" className="close-button" ref={closeEventButtonRef} onClick={closeEventEditor} aria-label="Cerrar movimiento planeado"><span aria-hidden="true">×</span></button>
+        </div>
+        <div className="event-form event-modal-form">
+          <div className="event-form-grid">
+            <label>Primera fecha<input type="date" value={eventDraft.date} onChange={(event) => setEventDraft((current) => ({ ...current, date: event.target.value, recurrenceEnd: current.recurrenceEnd && current.recurrenceEnd < event.target.value ? event.target.value : current.recurrenceEnd }))} /></label>
+            <label>Movimiento<input type="text" placeholder="Ej. Pagar tarjeta" value={eventDraft.title} onChange={(event) => setEventDraft((current) => ({ ...current, title: event.target.value }))} /></label>
+            <div className="picker-form-label"><span>Tipo</span><PickerField label="Tipo de movimiento planeado" value={eventDraft.kind} options={[{ value: "expense", label: "Gasto", description: "Reduce el saldo de una cuenta" }, { value: "income", label: "Ingreso", description: "Aumenta el saldo de una cuenta" }, { value: "transfer", label: "Transferencia", description: "Mueve dinero entre cuentas" }, { value: "contribution", label: "Aportación", description: "Destina dinero a una meta" }]} onChange={(value) => { const kind = value as MovementKind; const requiresDestination = kind === "transfer" || kind === "contribution"; setEventDraft((current) => ({ ...current, kind, includeInProjection: kind === "transfer" ? false : current.includeInProjection, destination: kind === "transfer" ? "none" : current.destination, toAccountId: requiresDestination ? current.toAccountId ?? accounts.find((account) => account.id !== current.accountId)?.id ?? null : null })); }} /></div>
+            <label>Monto<input type="text" inputMode="decimal" placeholder="Ej. 2,500.00" value={eventDraft.amount} onChange={(event) => setEventDraft((current) => ({ ...current, amount: event.target.value, numericAmount: parseMoneyInput(event.target.value) }))} onBlur={() => setEventDraft((current) => ({ ...current, amount: formatTransactionInput(current.numericAmount) }))} /></label>
+            <label>Nota <span className="optional">opcional</span><input type="text" placeholder="Ej. Servicios del mes" value={eventDraft.detail} onChange={(event) => setEventDraft((current) => ({ ...current, detail: event.target.value }))} /></label>
+            <div className="picker-form-label"><span>Repetición</span><PickerField label="Repetición" value={eventDraft.recurrence} options={[{ value: "none", label: "No se repite", description: "Se registra una sola vez" }, { value: "weekly", label: "Cada semana", description: "Se repite cada 7 días" }, { value: "monthly", label: "Cada mes", description: "Se repite cada mes" }, { value: "annual", label: "Cada año", description: "Se repite una vez al año" }]} onChange={(value) => setEventDraft((current) => ({ ...current, recurrence: value as EventRecurrence, recurrenceEnd: value === "none" ? null : current.recurrenceEnd }))} /></div>
+            {eventDraft.recurrence !== "none" && <label>Termina <span className="optional">opcional</span><input type="date" min={eventDraft.date} value={eventDraft.recurrenceEnd ?? ""} onChange={(event) => setEventDraft((current) => ({ ...current, recurrenceEnd: event.target.value || null }))} /><small>Vacío = sin fecha final</small></label>}
+            {eventDraft.kind !== "transfer" && <div className="picker-form-label"><span>Destino en proyección</span><PickerField label="Destino en proyección" value={eventDraft.destination} options={[{ value: "none", label: "No incluir", description: "No modifica la proyección" }, { value: "cetes", label: "Reserva / CETES", description: "Suma a tu fondo de reserva" }, { value: "gbm", label: "Inversión", description: "Suma a tu inversión" }]} onChange={(value) => setEventDraft((current) => ({ ...current, destination: value as ProjectionDestination, includeInProjection: value !== "none" }))} /></div>}
+            <div className="picker-form-label"><span>{eventDraft.kind === "transfer" || eventDraft.kind === "contribution" ? "Desde" : "Cuenta que afectará"}</span><PickerField label={eventDraft.kind === "transfer" || eventDraft.kind === "contribution" ? "Cuenta de origen" : "Cuenta que afectará"} ariaLabel="Cuenta que afectará" value={eventDraft.accountId} options={[{ value: "", label: "Selecciona una cuenta" }, ...accounts.map((account) => ({ value: account.id, label: account.label, description: formatMoney(account.amount) }))]} onChange={(value) => setEventDraft((current) => ({ ...current, accountId: value, toAccountId: current.toAccountId === value ? accounts.find((account) => account.id !== value)?.id ?? null : current.toAccountId }))} /></div>
+            {(eventDraft.kind === "transfer" || eventDraft.kind === "contribution") && <div className="picker-form-label"><span>Hacia</span><PickerField label="Cuenta destino del movimiento planeado" ariaLabel="Cuenta destino del movimiento planeado" value={eventDraft.toAccountId ?? ""} options={[{ value: "", label: "Selecciona destino" }, ...accounts.filter((account) => account.id !== eventDraft.accountId).map((account) => ({ value: account.id, label: account.label, description: formatMoney(account.amount) }))]} onChange={(value) => setEventDraft((current) => ({ ...current, toAccountId: value || null }))} /></div>}
+          </div>
+          <div className="event-form-actions"><small>{eventError || `${eventDraft.recurrence === "none" ? "Se agregará un solo movimiento." : `${recurrenceLabel(eventDraft.recurrence)} desde ${eventDraft.date}${eventDraft.recurrenceEnd ? ` hasta ${eventDraft.recurrenceEnd}` : ", sin fecha final"}.`}${eventDraft.includeInProjection ? " Su monto se reflejará en la proyección." : ""}`}</small><button type="button" className="primary-button" disabled={!eventDraft.title.trim() || !eventDraft.date} onClick={saveEvent}>{editingEventId === null ? "Guardar movimiento" : "Guardar cambios"}</button></div>
+        </div>
+      </ModalShell>
+    );
+  }
+
   const navigationItems = useMemo<PrimaryNavigationItem[]>(() => PRIMARY_NAV_ITEMS.map((item) => ({
     id: item.id,
     label: item.label,
@@ -2303,6 +2423,9 @@ export default function Home() {
   })), []);
 
   function navigateTo(view: AppView, options?: { replace?: boolean }) {
+    closeInfoTips();
+    setPlannedMovementsOpen(false);
+    closeEventEditor();
     setActiveView(view);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -2336,7 +2459,7 @@ export default function Home() {
         isExample={dataMode === "example"}
         saveStatus={saveStatus}
         onBackup={openBackupPanel}
-        onNewTransaction={() => openNewTransaction("expense")}
+        onNewTransaction={(kind?: QuickActionKind) => openNewTransaction(kind ?? "expense", undefined, true)}
       />
 
       <div className="content-area">
@@ -2348,11 +2471,10 @@ export default function Home() {
             eyebrow={formatHeadingDate(today)}
             title="Tu dinero hoy."
             description={dataMode === "example" ? "Explora con datos ficticios y reemplázalos cuando quieras." : "Mira lo importante y decide qué hacer después."}
-            end={<><span className={`private-pill heading-mode ${dataMode === "example" ? "example" : ""}`}><i /> {modeLabel}</span><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Registrar movimiento</button></>}
           />
 
           <section className="overview-grid" aria-label="Resumen financiero">
-            <article className="net-worth-card"><div className="hero-orb orb-one" /><div className="hero-orb orb-two" /><div className="card-label"><span>Patrimonio total</span><span className="soft-badge">{accounts.length} cuentas</span></div><strong className="hero-amount" aria-label={`Patrimonio total ${formatMoney(total)} pesos mexicanos`}>{formatMoney(total)}</strong><div className={`wealth-change ${monthNet >= 0 ? "positive" : "negative"}`}><span aria-hidden="true">{monthNet >= 0 ? "↗" : "↘"}</span><strong>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}</strong><small>flujo neto este mes</small></div><div className="net-worth-foot"><span><i className="status-dot green" /> {dataMode === "example" ? "Datos de ejemplo" : "Saldos al día"}</span><small>MXN · {lastSavedAt ? "guardado automático" : "preparando datos"}</small></div></article>
+            <article className="net-worth-card"><div className="hero-orb orb-one" /><div className="hero-orb orb-two" /><div className="card-label"><span>Patrimonio total</span><span className="soft-badge">{accounts.length} cuentas</span></div><strong className="hero-amount" aria-label={`Patrimonio total ${formatMoney(total)} pesos mexicanos`}>{formatMoney(total)}</strong><div className={`wealth-change ${monthNet >= 0 ? "positive" : "negative"}`}><span aria-hidden="true">{monthNet >= 0 ? "↗" : "↘"}</span><strong>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}</strong><small>flujo neto este mes</small></div><div className="net-worth-foot"><small>MXN · {lastSavedAt ? "guardado automático" : "preparando datos"}</small></div></article>
             <div className="overview-money-facts" aria-label="Resumen de saldos">
               <MetricCard tone="reserve" label="Reserva" value={formatMoney(reserve)} valueLabel={`Reserva ${formatMoney(reserve)} pesos mexicanos`} detail={`${reserveProgress}% de la meta de emergencia`} icon={<Icon name="shield" size={19} />} />
               <MetricCard tone="cash" label="Disponible" value={formatMoney(cash)} valueLabel={`Disponible ${formatMoney(cash)} pesos mexicanos`} detail="Liquidez inmediata · no se proyecta" icon={<Icon name="cash" size={19} />} />
@@ -2362,65 +2484,30 @@ export default function Home() {
 
           {dataMode === "example" && <aside className="demo-guide"><span className="demo-guide-mark">N</span><div><strong>Estás viendo una historia de ejemplo</strong><p>Cuando estés listo, crea un espacio limpio y agrega únicamente tus cuentas reales.</p></div><button className="secondary-button" type="button" onClick={startPersonalSetup}>Configurar mis datos</button></aside>}
 
-          <ContextRail>
-            <span><i className="status-dot green" /> {lastSavedAt ? "Cambios guardados localmente" : "Guardado automático activo"}</span>
-            <span>{accounts.length} cuentas · {transactions.length} operaciones</span>
-            <button className="text-button" type="button" onClick={() => navigateTo("data")}>Ver datos y respaldo <span aria-hidden="true">→</span></button>
-          </ContextRail>
-
           <section className="overview-insight-grid">
-            <details data-disclosure-group="overview" className="panel overview-collapsible overview-cashflow">
+            <details data-disclosure-group="overview" data-default-open="true" open className="panel overview-collapsible overview-cashflow">
               <summary className="overview-collapsible-summary">
-                <span><span className="eyebrow">ESTE MES</span><strong>Entró y salió</strong><small>{formatMoney(monthNet)} de flujo neto · resumen mensual</small></span>
+                <span><span className="eyebrow">ESTE MES</span><strong>Balance del mes</strong><small>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))} de flujo neto</small></span>
                 <span className="overview-collapsible-mark" aria-hidden="true">+</span>
               </summary>
               <div className="overview-collapsible-body">
                 <article className="cashflow-panel">
-                  <div className="panel-heading"><div><span className="eyebrow">ESTE MES</span><h2>Entró y salió</h2><p>Un resumen corto de tus movimientos reales.</p></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver movimientos <span aria-hidden="true">→</span></button></div>
-                  <div className="cashflow-summary"><div><span>Entró</span><strong className="positive-value">{formatMoney(monthIncome)}</strong></div><div><span>Salió</span><strong>{formatMoney(monthExpense)}</strong></div><div className="overview-secondary-metric"><span>Resultado</span><strong>{savingsRate === null ? "—" : `${savingsRate.toLocaleString("es-MX", { maximumFractionDigits: 0 })}%`}</strong></div></div>
-                  <div className="overview-flow-link"><span>El detalle mensual vive en Actividad, junto con tus filtros y categorías.</span><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver detalle <span aria-hidden="true">→</span></button></div>
+                  <div className="panel-heading compact"><div><span className="eyebrow">FLUJO MENSUAL</span><h2>{formatMonthGroupLabel(currentMonthKey)}</h2><p>Una lectura rápida de tus entradas y salidas.</p></div></div>
+                  <div className="cashflow-summary"><div><span>Ingresos</span><strong className="positive-value">{formatMoney(monthIncome)}</strong></div><div><span>Gastos</span><strong>{formatMoney(monthExpense)}</strong></div><div className={monthNet >= 0 ? "overview-secondary-metric is-positive" : "overview-secondary-metric is-negative"}><span>Balance</span><strong>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}</strong></div></div>
                 </article>
               </div>
             </details>
 
             <article className="panel reserve-focus">
-              <div className="panel-heading compact"><div><span className="eyebrow">PRIORIDAD ACTUAL</span><h2>Fondo de emergencia</h2></div><span className="goal-icon"><Icon name="shield" size={21} /></span></div>
-              <div className="reserve-focus-main"><GoalRing progress={reserveProgress} /><div><span>Has reunido</span><strong>{formatMoney(reserve)}</strong><small>de una meta de {formatMoney(target)}</small></div></div>
-              <div className="progress-track"><span style={{ width: `${reserveProgress}%` }} /></div>
-              <NextBestAction
-                tone="neutral"
-                title={reserveGap > 0 ? "Completar la reserva" : "Continuar con inversión"}
-                description={reserveGap > 0 ? `Dirige el excedente de tu nómina aquí hasta completar ${formatMoney(reserveGap)}.` : "Tu siguiente aportación puede ir a inversión de largo plazo."}
-                actionLabel={reserveGap > 0 ? "Aportar al fondo" : "Mover a inversión"}
-                onAction={() => {
-                const destination = reserveGap > 0
-                  ? accounts.find((account) => emergencyIds.includes(account.id))
-                  : accounts.find((account) => account.group === "investment");
-                openNewTransaction("transfer", destination?.id);
-                }}
-              />
-            </article>
+              <div className="panel-heading compact"><div><h2>Fondo de emergencia</h2></div><span className="goal-icon"><Icon name="shield" size={21} /></span></div>
+              <div className="reserve-focus-main"><GoalRing progress={reserveProgress} /><div className="reserve-focus-copy"><span>Has reunido</span><strong className="reserve-coverage-highlight">{coverageMonths === null ? "—" : `${coverageMonths.toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses cubiertos`}</strong><small>{formatMoney(reserve)} de una meta de {formatMoney(target)}</small></div></div>
+              <div className="reserve-focus-actions"><button type="button" className="primary-button" onClick={openEmergencyContribution}>Aportar</button><button type="button" className="secondary-button reserve-goal-button" onClick={openGoalEditor}>Ajustar meta <span aria-hidden="true">→</span></button></div>
+           </article>
            </section>
-
-           <details data-disclosure-group="overview" className="panel overview-collapsible recent-panel">
-             <summary className="overview-collapsible-summary">
-               <span><span className="eyebrow">RECIENTE</span><strong>Últimos movimientos</strong><small>{transactions.length === 0 ? "Aún no hay actividad" : `${Math.min(transactions.length, 3)} movimientos visibles`}</small></span>
-               <span className="overview-collapsible-mark" aria-hidden="true">+</span>
-             </summary>
-             <div className="overview-collapsible-body">
-               <div className="panel-heading"><div><span className="eyebrow">RECIENTE</span><h2>Últimos movimientos</h2></div><button type="button" className="text-button" onClick={() => navigateTo("activity")}>Ver todos <span aria-hidden="true">→</span></button></div>
-               {transactions.length === 0 ? <EmptyState icon="＋" title="Tu actividad aparecerá aquí" description="Registra un ingreso, gasto o transferencia para comenzar a ver el pulso de tu dinero." actions={<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button>} /> : <div className="transaction-list compact-list">
-                 {transactions.slice(0, 3).map((transaction) => (
-                   <button className="transaction-row" type="button" key={transaction.id} aria-label={`Editar movimiento ${transaction.title}`} onClick={() => openTransactionEditor(transaction)}>
-                     <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
-                     <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}</small></span>
-                     <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "")}</span>
-                     <strong className={`transaction-amount ${transaction.kind}`}>{transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : ""}{formatTransactionMoney(transaction.amount)}</strong>
-                   </button>
-                 ))}
-               </div>}
-             </div>
-           </details>
+        <section className="panel expense-category-card" aria-labelledby="expense-category-title">
+          <div className="panel-heading compact"><div><span className="eyebrow">GASTOS DEL MES</span><h2 id="expense-category-title">En qué se fue tu dinero</h2><p>Distribución por categoría para detectar patrones rápido.</p></div></div>
+          <ExpenseCategoryChart data={expenseCategoryData} />
+        </section>
         </div>
 
         <section id="activity-view" className="view-page activity-view" hidden={activeView !== "activity"}>
@@ -2428,7 +2515,7 @@ export default function Home() {
             eyebrow="ACTIVIDAD"
             title="Tus movimientos."
             description="Registra lo que entró y salió de tus cuentas."
-            end={<><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="text-button activity-plan-link" type="button" onClick={startPlannedMovement}>Planear movimiento</button><button className="primary-button" type="button" onClick={() => openNewTransaction("expense")}>+ Registrar movimiento</button></>}
+            end={<><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="text-button activity-plan-link" type="button" onClick={startPlannedMovement}>Planear movimiento</button><button className="primary-button" type="button" onClick={() => openNewTransaction("expense", undefined, true)}>+ Registrar movimiento</button></>}
           />
 
           <ContextRail label="Estado de actividad">
@@ -2459,27 +2546,16 @@ export default function Home() {
             <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Historial</h2><p>Elige un mes y encuentra una operación cuando la necesites.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
             <div className="activity-month-selector" aria-label="Cambiar mes en vista">
               <button type="button" className="month-step-button" aria-label="Mes anterior" disabled={visibleActivityMonth <= (activityMonthOptions.at(-1) ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, -1))}>‹</button>
-              <label><span className="sr-only">Mes en vista</span><select aria-label="Mes en vista" value={visibleActivityMonth} onChange={(event) => setActivityMonth(event.target.value)}>{activityMonthOptions.map((month) => <option key={month} value={month}>{formatMonthGroupLabel(month)}</option>)}</select></label>
+              <div className="picker-form-label"><span className="sr-only">Mes en vista</span><PickerField label="Mes en vista" ariaLabel="Mes en vista" value={visibleActivityMonth} options={activityMonthOptions.map((month) => ({ value: month, label: formatMonthGroupLabel(month) }))} onChange={setActivityMonth} /></div>
               <button type="button" className="month-step-button" aria-label="Mes siguiente" disabled={visibleActivityMonth >= (activityMonthOptions[0] ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, 1))}>›</button>
               {visibleActivityMonth !== currentMonthKey && <button type="button" className="text-button current-month-button" onClick={() => setActivityMonth(currentMonthKey)}>Ir al mes actual</button>}
             </div>
             <div className="ledger-toolbar">
-               <button
-                 type="button"
-                 className="filter-toggle"
-                 aria-expanded={activityFiltersOpen}
-                 aria-controls="activity-filter-panel"
-                 onClick={() => setActivityFiltersOpen((current) => !current)}
-               >
-                 <span aria-hidden="true">☷</span>
-                 Filtros{activityFilterChips.length > 0 ? ` · ${activityFilterChips.length}` : ""}
-                 <span aria-hidden="true">{activityFiltersOpen ? "−" : "+"}</span>
-               </button>
-               <div id="activity-filter-panel" className="activity-filter-controls" data-open={activityFiltersOpen ? "true" : "false"}>
+               <div id="activity-filter-panel" className="activity-filter-controls">
                  <div className="filter-tabs" role="group" aria-label="Filtrar actividad">
                    {(["all", "income", "expense", "transfer"] as const).map((filter) => <button type="button" key={filter} className={activityFilter === filter ? "active" : ""} aria-pressed={activityFilter === filter} onClick={() => setActivityFilter(filter)}>{filter === "all" ? "Todo" : filter === "income" ? "Ingresos" : filter === "expense" ? "Gastos" : "Transferencias"}</button>)}
                  </div>
-                 <label className="category-filter"><span>Categoría</span><select aria-label="Filtrar por categoría" value={activityCategory} onChange={(event) => setActivityCategory(event.target.value)}><option value="all">Todas</option>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
+                 <div className="category-filter"><span>Categoría</span><PickerField label="Filtrar por categoría" ariaLabel="Filtrar por categoría" value={activityCategory} options={[{ value: "all", label: "Todas", description: "Mostrar todas las categorías" }, ...categories.map((category) => ({ value: category.label, label: category.label }))]} onChange={setActivityCategory} /></div>
                </div>
                <span className="ledger-result-count" aria-live="polite" aria-busy={activitySearch !== deferredActivitySearch}>{filteredTransactions.length} de {activityMonthTransactions.length} movimiento{activityMonthTransactions.length === 1 ? "" : "s"} en {activityMonthLabel.toLocaleLowerCase("es-MX")}</span>
             </div>
@@ -2489,7 +2565,7 @@ export default function Home() {
                  icon="⌕"
                  title={activityFiltersActive ? "No encontramos movimientos" : "Todavía no hay actividad real"}
                  description={activityFiltersActive ? "Prueba otro filtro o registra una operación nueva." : "Registra tu primer ingreso o gasto para comenzar a ver tu flujo mensual."}
-                 actions={<>{activityFiltersActive && <button type="button" className="secondary-button" onClick={clearActivityFilters}>Limpiar filtros</button>}<button type="button" className="primary-button" onClick={() => openNewTransaction("expense")}>Registrar movimiento</button></>}
+                 actions={<>{activityFiltersActive && <button type="button" className="secondary-button" onClick={clearActivityFilters}>Limpiar filtros</button>}<button type="button" className="primary-button" onClick={() => openNewTransaction("expense", undefined, true)}>Registrar movimiento</button></>}
                />
             ) : (
               <div className="activity-month-groups">
@@ -2499,7 +2575,7 @@ export default function Home() {
                     <div className="activity-month-heading"><div><span className="eyebrow" id={`activity-month-${group.key}`}>{group.label}</span><small>{group.transactions.length} movimiento{group.transactions.length === 1 ? "" : "s"}</small></div><strong className={monthNet >= 0 ? "positive-value" : "negative-value"}>{monthNet >= 0 ? "+" : "−"}{formatMoney(Math.abs(monthNet))}<small>flujo neto</small></strong></div>
                     <div className="transaction-list">
                       {group.transactions.map((transaction) => (
-                        <div className="transaction-row" key={transaction.id}>
+                        <div className={`transaction-row activity-transaction-row ${transaction.kind}`} key={transaction.id}>
                           <CategoryMark category={transaction.category} categories={categories} kind={transaction.kind} />
                           <span className="transaction-copy"><strong>{transaction.title}</strong><small>{transaction.category} · {accountLabel(transaction.accountId)}{transaction.kind === "transfer" ? ` → ${accountLabel(transaction.toAccountId)}` : ""}{transaction.note ? ` · ${transaction.note}` : ""}</small></span>
                           <span className="transaction-date">{parseIsoDate(transaction.date).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }).replace(".", "")}</span>
@@ -2513,7 +2589,7 @@ export default function Home() {
               </div>
             )}
            </section>
-           <div ref={plannedMovementsRef}>{renderPlannedMovements()}</div>
+           <div>{renderPlannedMovements()}</div>
          </section>
 
         <section className="dashboard-grid view-page" hidden={activeView !== "accounts"}>
@@ -2525,7 +2601,6 @@ export default function Home() {
             end={<><span className="currency-pill">{accounts.length} cuentas · {formatMoney(total)}</span><button className="primary-button" type="button" onClick={openEditor}>Administrar cuentas</button></>}
           />
           <ContextRail label="Resumen de cuentas">
-            <span><i className="status-dot green" /> Patrimonio distribuido en {accounts.length} cuentas</span>
             <span>{formatMoney(total)} en total</span>
             <button className="text-button" type="button" onClick={() => navigateTo("activity")}>Ver actividad <span aria-hidden="true">→</span></button>
           </ContextRail>
@@ -2564,7 +2639,7 @@ export default function Home() {
                 <div className="goal-content"><GoalRing progress={reserveProgress} /><div className="goal-copy"><strong>{formatMoney(reserve)}</strong><span>de {formatMoney(target)}</span><small>Te faltan {formatMoney(Math.max(target - reserve, 0))}</small></div></div>
                 <div className="progress-track"><span style={{ width: `${reserveProgress}%` }} /></div>
                 <div className="coverage-card"><span>Cobertura actual</span><strong>{coverageMonths === null ? "—" : `${coverageMonths.toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses`}</strong><small>{coverageMonths === null ? "Agrega tu gasto esencial para calcularla." : coverageMonths >= 6 ? "Supera la referencia amplia de 6 meses." : coverageMonths >= 3 ? "Dentro de la referencia habitual de 3 a 6 meses." : "Por debajo de la referencia inicial de 3 meses."}</small></div>
-                <div className="accounts-goal-link"><p><strong>Configuración centralizada.</strong> El gasto esencial no es un ingreso: solo calcula tu cobertura. Cambia la meta en Plan para mantener un solo lugar de configuración.</p><button type="button" className="text-button" onClick={() => navigateTo("plan")}>Ajustar meta en Plan <span aria-hidden="true">→</span></button></div>
+                <div className="accounts-goal-link"><p><strong>Configuración centralizada.</strong> El gasto esencial no es un ingreso: solo calcula tu cobertura. Edita la meta desde Plan.</p><button type="button" className="text-button" onClick={() => { navigateTo("plan"); openGoalEditor(); }}>Editar meta <span aria-hidden="true">→</span></button></div>
               </div>
             </details>
 
@@ -2575,14 +2650,8 @@ export default function Home() {
           <ViewHeader
             eyebrow="PLAN"
             title="Tu futuro estimado."
-            description="Prueba una meta, un tiempo y una aportación."
-            end={<><span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span><button className="secondary-button plan-add-scenario" type="button" onClick={startExtraCreation}>Agregar escenario</button></>}
+            end={<span className="currency-pill">Horizonte · {years} {years === 1 ? "año" : "años"}</span>}
           />
-          <ContextRail label="Resumen del plan">
-            <span><i className="status-dot green" /> Proyección actualizada</span>
-            <span>Resultado en pesos de hoy</span>
-            <button className="text-button" type="button" onClick={() => document.getElementById("proyeccion")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Ir a la proyección <span aria-hidden="true">↓</span></button>
-          </ContextRail>
           <div className="plan-guide" aria-label="Ruta rápida para usar Plan">
             <div className="plan-guide-intro"><span className="eyebrow">RUTA RÁPIDA</span><strong>De la idea al resultado</strong></div>
             <ol className="plan-guide-steps">
@@ -2593,8 +2662,7 @@ export default function Home() {
 
         <section id="proyeccion" className="section-wrap projection-section view-page" hidden={activeView !== "plan"}>
           <div className="section-heading projection-heading">
-            <div><span className="eyebrow">RESULTADO</span><h2>Dinero final estimado</h2><p>Mira cuánto representarían tus decisiones en pesos de hoy.</p></div>
-            <div className="projection-controls"><div className="horizon-presets" role="group" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button type="button" className={years === period ? "active" : ""} aria-pressed={years === period} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" role="group" aria-label="Horizonte de proyección"><button type="button" aria-label="Reducir horizonte" disabled={years <= 1} onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite" aria-label={`Horizonte actual: ${years} ${years === 1 ? "año" : "años"}`}><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button type="button" aria-label="Aumentar horizonte" disabled={years >= MAX_YEARS} onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div><button type="button" className="secondary-button advanced-plan-toggle" aria-expanded={advancedPlanOpen} onClick={toggleAdvancedPlan}>{advancedPlanOpen ? "Ocultar ajustes" : "Ajustar cálculos"}</button></div>
+            <div className="projection-controls"><div className="horizon-presets" role="group" aria-label="Periodos rápidos">{[1, 5, 10, 20, 30].map((period) => <button type="button" className={years === period ? "active" : ""} aria-pressed={years === period} key={period} onClick={() => setYears(period)}>{period}a</button>)}</div><div className="horizon-control" role="group" aria-label="Horizonte de proyección"><button type="button" aria-label="Reducir horizonte" disabled={years <= 1} onClick={() => setYears((current) => Math.max(1, current - 1))}>−</button><div aria-live="polite" aria-label={`Horizonte actual: ${years} ${years === 1 ? "año" : "años"}`}><strong>{years}</strong><span>{years === 1 ? "año" : "años"}</span></div><button type="button" aria-label="Aumentar horizonte" disabled={years >= MAX_YEARS} onClick={() => setYears((current) => Math.min(MAX_YEARS, current + 1))}>+</button></div><button type="button" className="secondary-button advanced-plan-toggle" aria-expanded={advancedPlanOpen} onClick={toggleAdvancedPlan}>{advancedPlanOpen ? "Ocultar ajustes" : "Personalizar proyección"}</button></div>
           </div>
 
           <div className="panel extras-card compact-simulation" ref={extrasCardRef}>
@@ -2602,29 +2670,25 @@ export default function Home() {
               <button type="button" className="extras-toggle" aria-expanded={extrasOpen} aria-controls="extras-panel" onClick={toggleExtras}>
                 <span className="extras-toggle-copy">
                   <span className="eyebrow">SIMULACIÓN</span>
-                  <strong>Aportaciones extra</strong>
+                  <strong>Aportaciones al plan</strong>
                   <small>{extrasSummary}</small>
                 </span>
-                <span className="extras-toggle-icon" aria-hidden="true">{extrasOpen ? "−" : "+"}</span>
               </button>
-              {extrasOpen && <button type="button" className="primary-button extras-add-button" disabled={extraDraft !== null} onClick={addExtra}>{extraDraft ? "Edición en curso" : "+ Agregar escenario"}</button>}
+              <button type="button" className="secondary-button extras-add-button" onClick={startExtraCreation}>+ Añadir aporte</button>
+              <button type="button" className="extras-collapse-toggle" aria-label={extrasOpen ? "Contraer simulaciones" : "Expandir simulaciones"} aria-expanded={extrasOpen} aria-controls="extras-panel" onClick={toggleExtras}><span aria-hidden="true">{extrasOpen ? "−" : "+"}</span></button>
             </div>
             {extrasOpen && (
               <div id="extras-panel">
-                <p className="extras-hint">Prueba aportaciones hipotéticas sin convertirlas en movimientos reales de tu agenda. Los escenarios activos se reflejan en la gráfica de abajo.</p>
                 {extras.length === 0 && !extraDraft ? <div className="empty-state"><span>+</span><div><strong>Aún no hay ingresos adicionales</strong><p>Agrega un escenario para ver su impacto en la proyección.</p></div></div> : (
                   <div className="extra-list">
-                    {extras.map((item, index) => editingExtraId === item.id && !creatingExtra && extraDraft ? renderExtraEditor(extraDraft, index) : (
+                    {extras.map((item) => (
                       <article className={`extra-saved-card ${item.enabled ? "" : "is-off"}`} key={item.id}>
                         <div className="extra-saved-main">
-                          <div><span className="saved-badge">GUARDADO</span><h3>Escenario {index + 1}</h3><p>{describeExtra(item)}</p></div>
-                          <strong className="extra-saved-amount">{formatMoney(item.amount)}</strong>
+                          <div className="extra-saved-copy"><strong className="extra-saved-amount">{formatMoney(item.amount)}</strong><p className="extra-saved-description">{describeExtraSchedule(item)}</p></div>
                         </div>
-                        <div className="extra-saved-meta"><span>{item.recurring ? item.frequency === "monthly" ? "Recurrente · mensual" : "Recurrente · anual" : "Una sola vez"}</span><span>{item.destination === "gbm" ? "Inversión" : "CETES / reserva"}</span></div>
-                        <div className="extra-saved-actions"><label className="switch"><input aria-label={`Activar escenario ${index + 1}`} type="checkbox" checked={item.enabled} onChange={(event) => updateExtra(item.id, { enabled: event.target.checked })} /><span />{item.enabled ? "Activo" : "Inactivo"}</label><div><button type="button" className="secondary-button" onClick={() => editExtra(item)}>Editar</button><button type="button" className="danger-button" onClick={() => removeExtra(item.id)}>Eliminar</button></div></div>
+                        <div className="extra-saved-actions"><label className="switch"><input aria-label={`Activar aportación extra de ${formatMoney(item.amount)}`} type="checkbox" checked={item.enabled} onChange={(event) => updateExtra(item.id, { enabled: event.target.checked })} /><span />{item.enabled ? "Activo" : "Inactivo"}</label><div><button type="button" className="secondary-button" aria-label={`Editar aportación extra de ${formatMoney(item.amount)}`} onClick={() => editExtra(item)}>Editar</button><button type="button" className="danger-button" aria-label={`Eliminar aportación extra de ${formatMoney(item.amount)}`} onClick={() => removeExtra(item.id)}>Eliminar</button></div></div>
                       </article>
                     ))}
-                    {creatingExtra && extraDraft && renderExtraEditor(extraDraft, extras.length)}
                   </div>
                 )}
                 {extras.length > 0 && <div className="extras-footer">{activeExtras.length} escenario{activeExtras.length === 1 ? " activo" : "s activos"} incluido{activeExtras.length === 1 ? "" : "s"} en la gráfica</div>}
@@ -2634,38 +2698,22 @@ export default function Home() {
 
           <div className={`projection-grid ${advancedPlanOpen ? "has-advanced-plan" : "simple-plan"}`}>
             <div className="panel projection-card comparison-view">
-              <div className="projection-summary-head" role="status" aria-live="polite"><div><span>Neto estimado al final, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>{years} {years === 1 ? "año" : "años"} · después de costos e ISR estimados</small></div><span className="projection-badge success">Resultado principal</span></div>
+              <div className="projection-summary-head" role="status" aria-live="polite"><div><span>Neto estimado al final</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Pesos de hoy · {years} {years === 1 ? "año" : "años"} · costos e ISR estimados</small></div></div>
               <ProjectionChart points={comparisonPoints} goalMonth={projection.goalMonth} years={years} target={target} baseDate={today} />
               <details data-disclosure-group="plan" className="projection-explanation">
-                <summary>Cómo se forma esta cifra <small>Ver comparación, aportaciones y costos</small></summary>
+                <summary>Cómo se forma <small>Saldo actual + aportaciones + crecimiento</small></summary>
                 <div className="projection-explanation-body">
-                  <div className="projection-interpretation" aria-label="Cómo leer el resultado">
-                    <div><span>Valor nominal</span><strong>{formatMoney(lastNominalTotal)}</strong><small>Sin descontar inflación</small></div>
-                    <div><span>Pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Resultado comparable</small></div>
-                    <div><span>Efecto acumulado</span><strong>{formatMoney(inflationImpact)}</strong><small>Inflación estimada</small></div>
+                  <div className="projection-breakdown" aria-label="Cómo se forma la proyección">
+                    <div><span>Saldo actual</span><strong>{formatMoney(projectedStartingTotal)}</strong><small>Reserva + inversión</small></div>
+                    <div><span>Aportaciones</span><strong>{formatMoney(projection.netContributions)}</strong><small>{projectedEventSeries} {projectedEventSeries === 1 ? "serie" : "series"} de agenda · {activeExtras.length} {activeExtras.length === 1 ? "aporte extra" : "aportes extra"}</small></div>
+                    <div><span>Crecimiento estimado</span><strong>{formatMoney(estimatedReturn)}</strong><small>Rendimiento y costos estimados</small></div>
                   </div>
-                  <div className="projection-story" aria-label="Cómo se forma la proyección">
-                    <div><span>Parte de hoy</span><strong>{formatMoney(projectedStartingTotal)}</strong><small>{formatMoney(reserve)} reserva + {formatMoney(gbm)} inversión</small></div>
-                    <i aria-hidden="true">+</i>
-                    <div><span>Aportaciones netas</span><strong>{formatMoney(projection.netContributions)}</strong><small>{projectedEventSeries} {projectedEventSeries === 1 ? "serie" : "series"} de agenda + {activeExtras.length} {activeExtras.length === 1 ? "escenario" : "escenarios"}</small></div>
-                    <i aria-hidden="true">+</i>
-                    <div><span>Rendimiento estimado</span><strong>{formatMoney(estimatedReturn)}</strong><small>Con los supuestos elegidos</small></div>
-                    <i aria-hidden="true">=</i>
-                    <div className="story-result"><span>Total neto al salir</span><strong>{formatMoney(lastNominalTotal)}</strong><small>Al final de {years} {years === 1 ? "año" : "años"}</small></div>
-                  </div>
-                  <p className="projection-scope"><span className="projection-scope-icon" aria-hidden="true">i</span><span className="projection-scope-copy"><strong>{formatMoney(cash)} disponibles no se proyectan.</strong> Conservan su función de liquidez y no reciben rendimiento hasta que los clasifiques como reserva o inversión.</span></p>
-                  <div className="projection-metrics">
-                    <div className="projection-metric gross-metric"><span>Total antes de salida</span><strong>{formatMoney(lastGrossNominalTotal)}</strong><small>Reserva + inversión</small></div>
-                    <div className="projection-metric real-metric"><span>Neto al salir, en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Después de costos e ISR estimados</small></div>
-                    <div className="projection-metric cost-metric"><span>Costos de salida</span><strong>−{formatMoney(projection.exitCosts)}</strong><small>Comisión + ISR sobre ganancia</small></div>
-                  </div>
+                  <p className="projection-scope"><span className="projection-scope-icon" aria-hidden="true">i</span><span className="projection-scope-copy">{availableBalanceNotice}</span></p>
                 </div>
               </details>
-              <p className="chart-note">La línea neta supone una venta al final del horizonte y descuenta comisión de Trading MX e ISR sobre la ganancia. Las tasas son supuestos editables y no constituyen una garantía.</p>
-              <details data-disclosure-group="plan" className="projection-data"><summary>Ver tabla anual accesible</summary><div><table><caption>Proyección anual en pesos mexicanos</caption><thead><tr><th>Periodo</th><th>Reserva</th><th>Inversión</th><th>Pesos de hoy</th></tr></thead><tbody>{annualProjectionPoints.map((point) => <tr key={point.month}><th>{point.month === 0 ? "Hoy" : formatDurationMonths(point.month)}</th><td>{formatMoney(point.reserve)}</td><td>{formatMoney(point.gbm)}</td><td>{formatMoney(point.realTotal)}</td></tr>)}</tbody></table></div></details>
             </div>
 
-            <aside className={`panel assumptions-card ${advancedPlanOpen ? "is-open" : "is-advanced-hidden"}`}>
+            <aside ref={advancedPlanRef} className={`panel assumptions-card ${advancedPlanOpen ? "is-open" : "is-advanced-hidden"}`}>
                <div className="panel-heading compact"><div><span className="eyebrow">ESCENARIO</span><h2>Supuestos</h2></div></div>
                <div className="scenario-presets" role="group" aria-label="Escenarios rápidos"><button type="button" aria-pressed={reserveRate === 5 && gbmRate === 7 && inflationRate === 5} onClick={() => applyScenario("conservative")}>Conservador</button><button type="button" aria-pressed={reserveRate === RESERVE_RETURN && gbmRate === GBM_RETURN && inflationRate === DEFAULT_INFLATION} onClick={() => applyScenario("base")}>Base</button><button type="button" aria-pressed={reserveRate === 8 && gbmRate === 11 && inflationRate === 3.5} onClick={() => applyScenario("optimistic")}>Optimista</button></div>
                <div className="scenario-status" role="status" aria-live="polite"><span><i className="status-dot green" /> Escenario activo</span><strong>{scenarioLabel}</strong><small>{scenarioLabel === "Personalizado" ? "Ajustaste al menos un supuesto manualmente." : "Puedes cambiarlo sin alterar tus cuentas ni movimientos."}</small></div>
@@ -2679,20 +2727,9 @@ export default function Home() {
                   <label className="rate-field"><span className="rate-label">ISR estimado sobre ganancia <InfoTip text="Estimación para una venta elegible de VOO en SIC. El tratamiento fiscal individual y los dividendos pueden requerir revisión contable." /></span><span className="rate-input"><input aria-label="ISR estimado sobre ganancia" type="text" inputMode="decimal" value={capitalGainsTaxText} onChange={(event) => setCapitalGainsTaxText(event.target.value)} onBlur={() => setCapitalGainsTaxText(String(capitalGainsTax))} /><b>%</b></span></label>
                 </div>
               </details>
-              <details data-disclosure-group="plan" className="projection-settings">
-                <summary>Ajustar meta de reserva</summary>
-                <div className="goal-fields">
-                  <label className="target-field"><span>Gasto esencial mensual <InfoTip text="Solo calcula una referencia de cobertura de 3 a 6 meses. No se suma al patrimonio ni a la proyección." /></span><div><b>$</b><input aria-label="Gasto esencial mensual para calcular meses de cobertura" type="text" inputMode="decimal" value={monthlyExpensesText} onChange={(event) => setMonthlyExpensesText(event.target.value)} onBlur={() => setMonthlyExpensesText(formatNumberInput(monthlyExpenses))} /></div></label>
-                  <label className="target-field"><span>Meta personalizada</span><div><b>$</b><input aria-label="Meta del fondo de emergencia" type="text" inputMode="decimal" value={targetText} onChange={(event) => setTargetText(event.target.value)} onBlur={() => setTargetText(formatNumberInput(target))} /></div></label>
-                  <div className="coverage-card"><span>Cobertura actual</span><strong>{coverageMonths === null ? "—" : `${coverageMonths.toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses`}</strong><small>{coverageMonths === null ? "Agrega tu gasto esencial para calcularla." : coverageMonths >= 6 ? "Supera la referencia amplia de 6 meses." : coverageMonths >= 3 ? "Dentro de la referencia habitual de 3 a 6 meses." : "Por debajo de la referencia inicial de 3 meses."}</small></div>
-                  <div className="goal-suggestions"><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMin))}>Usar 3 meses</button><button type="button" onClick={() => setTargetText(formatNumberInput(recommendedTargetMax))}>Usar 6 meses</button></div>
-                </div>
-              </details>
-              <div className="assumptions-result"><span>Poder adquisitivo al final</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>El total neto al salir es {formatMoney(lastNominalTotal)}. La diferencia de {formatMoney(inflationImpact)} representa el efecto acumulado de una inflación de {inflationRate}% anual.</small></div>
+              <div className="assumptions-result"><span>Resultado en pesos de hoy</span><strong>{formatMoney(lastComparisonPoint.realTotal)}</strong><small>Calculado con una inflación estimada de {inflationRate}% anual.</small></div>
             </aside>
           </div>
-
-          <SavingsOptionsReference onOpen={() => setAdvancedPlanOpen(false)} />
 
         </section>
 
@@ -2731,11 +2768,30 @@ export default function Home() {
           </details>
         </section>
 
-        <footer className="footer"><button className="brand footer-brand" type="button" onClick={() => navigateTo("overview")}><BrandMark /><span className="brand-text">Nexo</span></button><p>Claridad para decidir mejor.</p><button type="button" className="footer-backup" onClick={openBackupPanel}>Abrir respaldo</button><span>Uso personal · MXN</span></footer>
       </div>
       </div>
 
       {toast && <div className={`app-toast ${toast.tone}`} role="status"><span aria-hidden="true">{toast.tone === "success" ? "✓" : "!"}</span><p>{toast.message}</p><button type="button" aria-label="Cerrar notificación" onClick={() => setToast(null)}>×</button></div>}
+
+      {goalEditorOpen && (
+        <ModalShell ref={goalModalRef} className="editor-modal goal-editor-modal" backdropClassName="goal-editor-backdrop" labelledBy="goal-editor-title" describedBy="goal-editor-description" onBackdropClick={(event) => { if (event.target === event.currentTarget) setGoalEditorOpen(false); }}>
+          <div className="editor-heading">
+            <div><span className="eyebrow">META DEL FONDO DE EMERGENCIA</span><h2 id="goal-editor-title">Ajusta tu meta</h2><p id="goal-editor-description">Define cuánto quieres reunir y usa tu gasto esencial para estimar cuántos meses cubre.</p></div>
+            <button type="button" className="close-button" ref={closeGoalButtonRef} onClick={() => setGoalEditorOpen(false)} aria-label="Cerrar edición de meta"><span aria-hidden="true">×</span></button>
+          </div>
+          <div className="goal-editor-summary" aria-label="Progreso actual de la meta">
+            <div><span>Reserva actual</span><strong>{formatMoney(reserve)}</strong><small>{reserveProgress}% de {formatMoney(target)}</small></div>
+            <div className="goal-editor-summary-mark" aria-hidden="true">{reserveProgress}%</div>
+          </div>
+          <div className="goal-editor-fields">
+            <label className="target-field"><span>Gasto esencial mensual <InfoTip text="Solo calcula una referencia de cobertura de 3 a 6 meses. No se suma al patrimonio ni a la proyección." /></span><div><b>$</b><input aria-label="Gasto esencial mensual para calcular meses de cobertura" type="text" inputMode="decimal" value={goalEditorDraft.monthlyExpensesText} onChange={(event) => setGoalEditorDraft((current) => ({ ...current, monthlyExpensesText: event.target.value }))} /></div><small>Se usa para calcular tu cobertura, no modifica tus saldos.</small></label>
+            <label className="target-field"><span>Meta personalizada</span><div><b>$</b><input aria-label="Meta del fondo de emergencia" type="text" inputMode="decimal" value={goalEditorDraft.targetText} onChange={(event) => setGoalEditorDraft((current) => ({ ...current, targetText: event.target.value }))} /></div></label>
+            <div className="coverage-card"><span>Cobertura con la meta actual</span><strong>{(() => { const draftMonthly = parseMoneyInput(goalEditorDraft.monthlyExpensesText); return draftMonthly > 0 ? `${(reserve / draftMonthly).toLocaleString("es-MX", { maximumFractionDigits: 1 })} meses` : "—"; })()}</strong><small>La referencia habitual es de 3 a 6 meses.</small></div>
+            <div className="goal-suggestions"><button type="button" onClick={() => { const draftMonthly = parseMoneyInput(goalEditorDraft.monthlyExpensesText); if (draftMonthly > 0) setGoalEditorDraft((current) => ({ ...current, targetText: formatNumberInput(draftMonthly * 3) })); }}>Usar 3 meses</button><button type="button" onClick={() => { const draftMonthly = parseMoneyInput(goalEditorDraft.monthlyExpensesText); if (draftMonthly > 0) setGoalEditorDraft((current) => ({ ...current, targetText: formatNumberInput(draftMonthly * 6) })); }}>Usar 6 meses</button></div>
+          </div>
+          <div className="editor-actions sticky-actions goal-editor-actions"><span>La meta también se actualiza en Cuentas y en la proyección.</span><div><button type="button" className="secondary-button" onClick={() => setGoalEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveGoalEditor}>Guardar meta</button></div></div>
+        </ModalShell>
+      )}
 
       {confirmationAction && (
         <ModalShell ref={confirmationModalRef} className="confirmation-modal" backdropClassName="confirmation-backdrop" role="alertdialog" labelledBy="confirmation-title" describedBy="confirmation-description">
@@ -2754,20 +2810,16 @@ export default function Home() {
         </ModalShell>
       )}
 
+      {renderEventEditor()}
+
       {transactionEditorOpen && (
-        <ModalShell ref={transactionModalRef} className="transaction-modal" backdropClassName="transaction-backdrop" labelledBy="transaction-title" describedBy="transaction-description" onBackdropClick={(event) => { if (event.target === event.currentTarget) setTransactionEditorOpen(false); }}>
+        <ModalShell ref={transactionModalRef} className={`transaction-modal transaction-modal-${transactionDraft.kind}`} backdropClassName="transaction-backdrop" labelledBy="transaction-title" onBackdropClick={(event) => { if (event.target === event.currentTarget) setTransactionEditorOpen(false); }}>
             <div className="editor-heading transaction-modal-heading">
-              <div><span className="eyebrow">{editingTransactionId ? "EDITAR ACTIVIDAD" : "NUEVA ACTIVIDAD"}</span><h2 id="transaction-title">{editingTransactionId ? "Ajusta el movimiento" : "Registra un movimiento"}</h2><p id="transaction-description">El saldo y las visualizaciones se actualizarán al guardar.</p></div>
-              <button type="button" className="close-button" ref={closeTransactionButtonRef} onClick={() => setTransactionEditorOpen(false)} aria-label="Cerrar movimiento">×</button>
+              <div><h2 id="transaction-title">{transactionFormTitle}</h2></div>
+              <button type="button" className="close-button" ref={closeTransactionButtonRef} onClick={() => setTransactionEditorOpen(false)} aria-label="Cerrar movimiento"><span aria-hidden="true">×</span></button>
             </div>
 
-            <div className="form-stepper" aria-label="Pasos para registrar un movimiento">
-              <span className={transactionStep === 1 ? "active" : "complete"} aria-current={transactionStep === 1 ? "step" : undefined}><b>1</b> Tipo</span>
-              <span className={transactionStep === 2 ? "active" : transactionStep > 2 ? "complete" : ""} aria-current={transactionStep === 2 ? "step" : undefined}><b>2</b> Detalles</span>
-              <span className={transactionStep === 3 ? "active" : ""} aria-current={transactionStep === 3 ? "step" : undefined}><b>3</b> Confirmar</span>
-            </div>
-
-            <fieldset className="transaction-kind-picker">
+            {!transactionKindLocked && <fieldset className="transaction-kind-picker">
               <legend className="sr-only">Tipo de movimiento</legend>
               {(["expense", "income", "transfer"] as const).map((kind) => (
                 <button type="button" key={kind} className={transactionDraft.kind === kind ? `active ${kind}` : ""} aria-pressed={transactionDraft.kind === kind} onClick={() => {
@@ -2781,50 +2833,43 @@ export default function Home() {
                     toAccountId: kind === "transfer" ? current.toAccountId && current.toAccountId !== source?.id ? current.toAccountId : destination?.id ?? null : null,
                   }));
                   setTransactionError("");
-                }}><TransactionMark kind={kind} /><span><strong>{kind === "expense" ? "Gasto" : kind === "income" ? "Ingreso" : "Transferencia"}</strong><small>{kind === "expense" ? "Dinero que salió" : kind === "income" ? "Dinero que entró" : "Entre tus cuentas"}</small></span></button>
+                }}><TransactionMark kind={kind} /><span><strong>{kind === "expense" ? "Gasto" : kind === "income" ? "Ingreso" : "Transferencia"}</strong></span></button>
               ))}
-            </fieldset>
+            </fieldset>}
 
-            <label className="transaction-amount-field"><span>Monto</span><div className={transactionError ? "has-error" : ""}><b>$</b><input ref={transactionAmountRef} aria-label="Monto del movimiento en pesos mexicanos" aria-invalid={transactionError ? "true" : "false"} aria-describedby={transactionError ? "transaction-form-error transaction-amount-help" : "transaction-amount-help"} autoComplete="off" type="text" inputMode="decimal" placeholder="0.00" value={transactionDraft.amountText} onChange={(event) => { setTransactionDraft((current) => ({ ...current, amountText: event.target.value, amount: parseMoneyInput(event.target.value) })); setTransactionError(""); }} onBlur={() => setTransactionDraft((current) => ({ ...current, amountText: current.amount > 0 ? formatTransactionInput(current.amount) : "" }))} /><em>MXN</em></div><small id="transaction-amount-help" className="amount-field-help">{transactionDraft.kind === "income" ? `Entrará a ${accountLabel(transactionDraft.accountId)}.` : transactionDraft.kind === "transfer" ? `${accountLabel(transactionDraft.accountId)} → ${accountLabel(transactionDraft.toAccountId)}.` : `Saldrá de ${accountLabel(transactionDraft.accountId)}.`}</small></label>
+            <label className="transaction-amount-field"><span>{transactionAmountLabel}</span><div className={transactionError ? "has-error" : ""}><b>$</b><input ref={transactionAmountRef} aria-label="Monto del movimiento en pesos mexicanos" aria-invalid={transactionError ? "true" : "false"} aria-describedby={transactionError ? "transaction-form-error" : undefined} autoComplete="off" type="text" inputMode="decimal" placeholder="0.00" value={transactionDraft.amountText} onChange={(event) => { setTransactionDraft((current) => ({ ...current, amountText: event.target.value, amount: parseMoneyInput(event.target.value) })); setTransactionError(""); }} onBlur={() => setTransactionDraft((current) => ({ ...current, amountText: current.amount > 0 ? formatTransactionInput(current.amount) : "" }))} /><em>MXN</em></div></label>
 
             <div className="transaction-form-grid">
-              <label>Concepto<input autoComplete="off" type="text" placeholder={transactionDraft.kind === "income" ? "Ej. Nómina" : transactionDraft.kind === "transfer" ? "Ej. Aportación al fondo" : "Ej. Supermercado"} value={transactionDraft.title} onChange={(event) => setTransactionDraft((current) => ({ ...current, title: event.target.value }))} /></label>
+              <label>Descripción<input autoComplete="off" type="text" placeholder={transactionDraft.kind === "income" ? "Ej. Nómina" : transactionDraft.kind === "transfer" ? "Ej. Aportación al fondo" : "Ej. Supermercado"} value={transactionDraft.title} onChange={(event) => setTransactionDraft((current) => ({ ...current, title: event.target.value }))} /></label>
               <label>Fecha<input type="date" value={transactionDraft.date} onChange={(event) => setTransactionDraft((current) => ({ ...current, date: event.target.value }))} /></label>
-              <label>{transactionDraft.kind === "transfer" ? "Desde" : "Cuenta"}<select value={transactionDraft.accountId} onChange={(event) => setTransactionDraft((current) => ({ ...current, accountId: event.target.value, toAccountId: current.toAccountId === event.target.value ? accounts.find((account) => account.id !== event.target.value)?.id ?? null : current.toAccountId }))}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>
-              {transactionDraft.kind === "transfer" && <label>Hacia<select value={transactionDraft.toAccountId ?? ""} onChange={(event) => setTransactionDraft((current) => ({ ...current, toAccountId: event.target.value || null }))}><option value="">Selecciona destino</option>{accounts.filter((account) => account.id !== transactionDraft.accountId).map((account) => <option key={account.id} value={account.id}>{account.label} · {formatMoney(account.amount)}</option>)}</select></label>}
+              <div className="picker-form-label"><span>{transactionDraft.kind === "transfer" ? "Desde" : "Cuenta"}</span><PickerField label={transactionDraft.kind === "transfer" ? "Cuenta de origen" : "Cuenta"} value={transactionDraft.accountId} options={accounts.map((account) => ({ value: account.id, label: account.label, description: formatMoney(account.amount) }))} onChange={(value) => setTransactionDraft((current) => ({ ...current, accountId: value, toAccountId: current.toAccountId === value ? accounts.find((account) => account.id !== value)?.id ?? null : current.toAccountId }))} /></div>
+              {transactionDraft.kind === "transfer" && <div className="picker-form-label"><span>Hacia</span><PickerField label="Cuenta destino" value={transactionDraft.toAccountId ?? ""} options={[{ value: "", label: "Selecciona destino" }, ...accounts.filter((account) => account.id !== transactionDraft.accountId).map((account) => ({ value: account.id, label: account.label, description: formatMoney(account.amount) }))]} onChange={(value) => setTransactionDraft((current) => ({ ...current, toAccountId: value || null }))} /></div>}
+              <div className="picker-form-label"><span>Categoría</span><PickerField label="Categoría del movimiento" ariaLabel="Categoría del movimiento" value={transactionDraft.category} options={categories.map((category) => ({ value: category.label, label: category.label }))} onChange={(value) => setTransactionDraft((current) => ({ ...current, category: value }))} /></div>
+              <label>Nota opcional<input type="text" placeholder="Agrega contexto útil" value={transactionDraft.note} onChange={(event) => setTransactionDraft((current) => ({ ...current, note: event.target.value }))} /></label>
             </div>
-
-            <details data-disclosure-group="transaction" className="transaction-optional-details">
-              <summary>Agregar detalles <span>opcional</span></summary>
-              <div className="transaction-optional-grid">
-                <div className="category-editor-field">
-                  <label>Categoría<select aria-label="Categoría del movimiento" value={transactionDraft.category} onChange={(event) => setTransactionDraft((current) => ({ ...current, category: event.target.value }))}>{categories.map((category) => <option key={category.id} value={category.label}>{category.label}</option>)}</select></label>
-                  <button type="button" className="inline-add-button" onClick={openCategoryCreator}>+ Nueva categoría</button>
-                  {categoryEditorOpen && <div className="category-creator" aria-label="Crear categoría">
-                    <label>Nombre<input type="text" placeholder="Ej. Mascotas" value={categoryDraftName} onChange={(event) => setCategoryDraftName(event.target.value)} /></label>
-                    <div className="category-icon-picker" role="group" aria-label="Icono de la categoría">{CATEGORY_ICON_OPTIONS.map((option) => <button type="button" key={option.id} className={categoryDraftIcon === option.id ? "active" : ""} aria-label={`Icono ${option.label}`} title={option.label} onClick={() => setCategoryDraftIcon(option.id)}><Icon name={option.id} size={17} /></button>)}</div>
-                    {categoryError && <small className="form-error category-error" role="alert">{categoryError}</small>}
-                    <div className="category-creator-actions"><button type="button" className="secondary-button" onClick={() => setCategoryEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveCategory}>Crear categoría</button></div>
-                  </div>}
-                </div>
-                <label className="transaction-note-field">Nota <span className="optional">opcional</span><input type="text" placeholder="Agrega contexto útil" value={transactionDraft.note} onChange={(event) => setTransactionDraft((current) => ({ ...current, note: event.target.value }))} /></label>
-              </div>
-            </details>
 
             {transactionError && <p id="transaction-form-error" className="form-error" role="alert">{transactionError}</p>}
-            <div className="transaction-preview" aria-label="Vista previa del registro">
-              <span>Vista previa del registro</span>
-              <strong>{transactionDraft.kind === "income" ? "+" : transactionDraft.kind === "expense" ? "−" : ""}{formatTransactionMoney(transactionDraft.amount)}</strong>
-              <small>{transactionDraft.kind === "transfer" ? `${accountLabel(transactionDraft.accountId)} → ${accountLabel(transactionDraft.toAccountId)}` : `${transactionDraft.title.trim() || "Sin concepto"} · ${accountLabel(transactionDraft.accountId)}`}</small>
-              <small>{transactionDraft.kind === "transfer" ? "No cambia tu flujo neto" : transactionDraft.kind === "income" ? "Se suma a tus ingresos" : "Se suma a tus gastos"}</small>
-            </div>
-            <div className="editor-actions transaction-actions"><button type="button" className="secondary-button" onClick={() => setTransactionEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button" onClick={saveTransaction}>{editingTransactionId ? "Guardar cambios" : "Registrar movimiento"}</button></div>
+            <div className="editor-actions transaction-actions"><button type="button" className="secondary-button" onClick={() => setTransactionEditorOpen(false)}>Cancelar</button><button type="button" className="primary-button transaction-submit-button" aria-label={editingTransactionId ? "Guardar cambios" : "Guardar movimiento"} onClick={saveTransaction}><span aria-hidden="true">✓</span><span className="transaction-submit-label">{editingTransactionId ? "Guardar" : "Listo"}</span></button></div>
+        </ModalShell>
+      )}
+
+      {extraEditorOpen && extraDraft && (
+        <ModalShell ref={extraModalRef} className="transaction-modal extra-scenario-modal" backdropClassName="transaction-backdrop" labelledBy="extra-editor-title" onBackdropClick={(event) => { if (event.target === event.currentTarget) cancelExtraEdit(); }}>
+          <div className="editor-heading transaction-modal-heading">
+            <div><span className="eyebrow">SIMULACIÓN</span><h2 id="extra-editor-title">{creatingExtra ? "Nuevo escenario" : "Editar escenario"}</h2></div>
+            <button type="button" className="close-button" ref={closeExtraButtonRef} onClick={cancelExtraEdit} aria-label="Cerrar escenario"><span aria-hidden="true">×</span></button>
+          </div>
+          <div className="extra-scenario-modal-body">
+            <div className="extra-scenario-modal-status"><label className="switch"><input aria-label="Incluir escenario en la proyección" type="checkbox" checked={extraDraft.enabled} onChange={(event) => updateExtraDraft({ enabled: event.target.checked })} /><span />{extraDraft.enabled ? "Activo" : "Inactivo"}</label><span>{creatingExtra ? "Nueva aportación hipotética" : "Cambios sin guardar"}</span></div>
+            <div className="extra-scenario-form-scroll">{renderExtraEditor(extraDraft, extras.length, false)}</div>
+            <div className="extra-editor-actions extra-scenario-modal-actions"><button type="button" className="secondary-button" onClick={cancelExtraEdit}>Cancelar</button><button type="button" className="primary-button" disabled={extraDraft.amount <= 0} onClick={saveExtra}>Guardar escenario</button></div>
+          </div>
         </ModalShell>
       )}
 
       {editing && (
         <ModalShell ref={editorModalRef} className="editor-modal" labelledBy="editor-title" describedBy="editor-description" onBackdropClick={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
-            <div className="editor-heading"><div><span className="eyebrow">DATOS BASE</span><h2 id="editor-title">Administrar cuentas y saldos</h2><p id="editor-description">Edita nombres, montos, rendimientos y notas. También puedes agregar o eliminar cuentas.</p></div><button type="button" className="close-button" ref={closeEditorButtonRef} onClick={() => setEditing(false)} aria-label="Cerrar editor">×</button></div>
+            <div className="editor-heading"><div><span className="eyebrow">DATOS BASE</span><h2 id="editor-title">Administrar cuentas y saldos</h2><p id="editor-description">Edita nombres, montos, rendimientos y notas. También puedes agregar o eliminar cuentas.</p></div><button type="button" className="close-button" ref={closeEditorButtonRef} onClick={() => setEditing(false)} aria-label="Cerrar editor"><span aria-hidden="true">×</span></button></div>
             <div className="editor-toolbar"><span>{draftAccounts.length} cuentas{draftAccountsChanged && <b className="unsaved-badge">Cambios sin guardar</b>}</span><div>{removedDraftAccount && <button type="button" className="undo-account" onClick={undoDraftAccountRemoval}>Deshacer eliminación</button>}<button type="button" className="secondary-button" onClick={addDraftAccount}>+ Agregar cuenta</button></div></div>
             {accountEditorNotice && <p className="editor-notice" role="status">{accountEditorNotice}</p>}
             <div className="account-manager">
@@ -2833,7 +2878,7 @@ export default function Home() {
                 <div className="account-input-head"><input className="account-title-input" aria-label="Nombre de la cuenta" value={selectedDraftAccount.label} onChange={(event) => updateDraftAccount(selectedDraftAccount.id, { label: event.target.value })} /><button type="button" aria-label={`Eliminar ${selectedDraftAccount.label}`} onClick={() => removeDraftAccount(selectedDraftAccount.id)}>Eliminar cuenta</button></div>
                 <div className="account-fields">
                   <label>Saldo<div className="amount-field"><b>$</b><input aria-label={`Saldo de ${selectedDraftAccount.label}`} type="text" inputMode="decimal" value={selectedDraftAccount.amountText ?? formatNumberInput(selectedDraftAccount.amount)} onChange={(event) => updateDraftAmount(selectedDraftAccount.id, event.target.value)} onBlur={() => updateDraftAccount(selectedDraftAccount.id, { amountText: formatNumberInput(selectedDraftAccount.amount) })} /></div></label>
-                  <label>Tipo<select value={selectedDraftAccount.group} onChange={(event) => updateDraftAccount(selectedDraftAccount.id, { group: event.target.value as AccountGroup })}><option value="reserve">Reserva</option><option value="investment">Inversión</option><option value="cash">Disponible</option></select></label>
+                  <div className="picker-form-label"><span>Tipo</span><PickerField label="Tipo de cuenta" value={selectedDraftAccount.group} options={[{ value: "reserve", label: "Reserva", description: "Dinero para tu fondo de emergencia" }, { value: "investment", label: "Inversión", description: "Dinero destinado a crecer" }, { value: "cash", label: "Disponible", description: "Liquidez para usar cuando la necesites" }]} onChange={(value) => updateDraftAccount(selectedDraftAccount.id, { group: value as AccountGroup })} /></div>
                   <label>Rendimiento / estado<input type="text" value={selectedDraftAccount.rate} onChange={(event) => updateDraftAccount(selectedDraftAccount.id, { rate: event.target.value })} /></label>
                   <label className="note-field">Nota<input type="text" value={selectedDraftAccount.note} onChange={(event) => updateDraftAccount(selectedDraftAccount.id, { note: event.target.value })} /></label>
                 </div>

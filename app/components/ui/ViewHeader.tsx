@@ -4,7 +4,7 @@ type ViewHeaderProps = {
   id?: string;
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   sectionIndex?: number;
   sectionTotal?: number;
   sectionHint?: string;
@@ -19,7 +19,7 @@ export function ViewHeader({ id, eyebrow, title, description, sectionIndex, sect
         <span className="eyebrow">{eyebrow}</span>
         {sectionIndex && <div className="view-orientation" aria-label={`Sección ${sectionIndex} de ${sectionTotal}`}><b>{String(sectionIndex).padStart(2, "0")}</b><span>de {String(sectionTotal).padStart(2, "0")}</span>{sectionHint && <small>{sectionHint}</small>}</div>}
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {end && <div className="heading-meta view-header-end">{end}</div>}
     </section>
