@@ -1002,8 +1002,15 @@ function ProjectionChart({
 
   return (
     <div className="chart-shell">
-      <div className="chart-legend" aria-label="Líneas visibles de la proyección">
-        {lineDefinitions.map((line) => <button type="button" key={line.key} className={`chart-legend-toggle${visibleLines[line.key] ? " is-active" : ""}`} aria-pressed={visibleLines[line.key]} onClick={() => toggleLine(line.key)}><i className={`legend-line ${line.lineClass}`} /><span>{line.label}</span></button>)}
+      <div className="chart-legend-head">
+        <span className="chart-legend-title">Líneas de la gráfica</span>
+        <span className="chart-legend-instruction">Toca una opción para mostrar u ocultar</span>
+      </div>
+      <div className="chart-legend" role="group" aria-label="Mostrar u ocultar líneas de la proyección">
+        {lineDefinitions.map((line) => {
+          const isVisible = visibleLines[line.key];
+          return <button type="button" key={line.key} className={`chart-legend-toggle${isVisible ? " is-active" : ""}`} aria-label={`${line.label}: ${isVisible ? "visible, ocultar línea" : "oculta, mostrar línea"}`} aria-pressed={isVisible} title={`${isVisible ? "Ocultar" : "Mostrar"} línea de ${line.label}`} onClick={() => toggleLine(line.key)}><i className={`legend-line ${line.lineClass}`} /><span>{line.label}</span><small>{isVisible ? "Visible" : "Oculta"}</small></button>;
+        })}
         {goalMonth && <span><i className="legend-marker" /> Meta en {formatDurationMonths(goalMonth)}</span>}
       </div>
       <div className="chart-frame" ref={chartFrameRef}>

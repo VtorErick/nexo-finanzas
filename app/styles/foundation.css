@@ -934,10 +934,31 @@ textarea {
 
 /* Plan · la gráfica cuenta una historia simple por defecto. Las líneas
    comparables se activan desde la leyenda, sin cargar la primera lectura. */
+.chart-legend-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.chart-legend-title {
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chart-legend-instruction {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .chart-legend-toggle {
   align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
   border-radius: 9px;
   color: var(--muted);
   cursor: pointer;
@@ -947,6 +968,7 @@ textarea {
   min-height: 38px;
   padding: 5px 8px;
   text-align: left;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
 }
 
 .chart-legend-toggle:hover,
@@ -966,6 +988,14 @@ textarea {
   gap: 1px;
 }
 
+.chart-legend-toggle > small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  margin-left: auto;
+  text-transform: uppercase;
+}
+
 .chart-legend-toggle b {
   color: var(--ink);
   font-family: var(--font-num);
@@ -975,6 +1005,12 @@ textarea {
 }
 
 @media (max-width: 699px) {
+  .chart-legend-head {
+    align-items: flex-start;
+    display: grid;
+    gap: 3px;
+  }
+
   .chart-legend-toggle {
     min-height: 42px;
     padding-left: 7px;

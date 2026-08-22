@@ -408,6 +408,18 @@ test.describe("Nexo UI flows", () => {
     await expect(projectionCard.getByText("Neto estimado al final", { exact: true })).toBeVisible();
     await expect(projectionCard.getByText("Resultado principal", { exact: true })).toHaveCount(0);
     await expect(projectionCard.locator(".chart-legend-toggle b")).toHaveCount(0);
+    const lineToggles = projectionCard.locator(".chart-legend-toggle");
+    await expect(projectionCard.locator(".chart-legend-instruction")).toHaveText("Toca una opción para mostrar u ocultar");
+    await expect(lineToggles).toHaveCount(3);
+    await expect(lineToggles.nth(0)).toHaveAttribute("aria-pressed", "false");
+    await expect(lineToggles.nth(2)).toHaveAttribute("aria-pressed", "true");
+    await lineToggles.nth(2).scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 180);
+    await page.waitForTimeout(80);
+    await page.screenshot({ path: "review-captures/audit32-plan-chart-line-controls-mobile.png", fullPage: false });
+    await lineToggles.nth(0).click();
+    await expect(lineToggles.nth(0)).toHaveAttribute("aria-pressed", "true");
+    await expect(projectionCard.locator(".chart-line.reserve-stroke")).toHaveCount(1);
     await expect(page.locator(".projection-data")).toHaveCount(0);
     await expect(page.locator(".reference-options-panel")).toHaveCount(0);
     await expect(page.getByText("La línea neta supone una venta", { exact: false })).toHaveCount(0);
