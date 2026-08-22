@@ -4557,7 +4557,7 @@ html[data-theme="dark"] {
 
 .overview-cashflow .cashflow-panel > .panel-heading.compact,
 .expense-category-card > .panel-heading.compact {
-  padding: 22px 0 0;
+  padding: 22px 22px 0;
 }
 
 .expense-category-layout {
@@ -4678,7 +4678,7 @@ html[data-theme="dark"] {
 
   .overview-cashflow .cashflow-panel > .panel-heading.compact,
   .expense-category-card > .panel-heading.compact {
-    padding-top: 18px;
+    padding: 18px 16px 0;
   }
 
   .overview-cashflow .cashflow-summary {

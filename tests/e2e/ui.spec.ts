@@ -480,8 +480,17 @@ test.describe("Nexo UI flows", () => {
     await expect(expenseCard).toBeVisible();
     await expect(expenseCard.locator(".expense-category-donut")).toBeVisible();
     expect(await expenseCard.locator(".expense-category-item").count()).toBeGreaterThan(0);
+    const spacing = await expenseCard.evaluate((card) => {
+      const heading = card.querySelector<HTMLElement>(":scope > .panel-heading.compact > div");
+      const layout = card.querySelector<HTMLElement>(":scope > .expense-category-layout");
+      if (!heading || !layout) return { headingX: 0, contentX: 0 };
+      const layoutStyle = getComputedStyle(layout);
+      return { headingX: heading.getBoundingClientRect().x, contentX: layout.getBoundingClientRect().x + Number.parseFloat(layoutStyle.paddingLeft) };
+    });
+    expect(Math.abs(spacing.headingX - spacing.contentX)).toBeLessThanOrEqual(1);
     await page.waitForTimeout(350);
     await page.screenshot({ path: "review-captures/audit25-hoy-expenses-mobile.png", fullPage: false });
+    await page.screenshot({ path: "review-captures/audit29-expense-card-spacing-mobile.png", fullPage: false });
 
     await page.goto("/?view=accounts");
     await expect(page.locator(".view-page:not([hidden]) h1")).toBeVisible();
