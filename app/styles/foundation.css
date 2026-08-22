@@ -4578,16 +4578,18 @@ html[data-theme="dark"] {
 
 .activity-expense-month-nav {
   align-items: center;
-  display: flex;
-  flex: 0 0 auto;
+  display: grid;
+  flex: 0 1 280px;
   gap: 8px;
+  grid-template-columns: 34px minmax(112px, 1fr) 34px;
+  width: min(100%, 280px);
 }
 
 .activity-expense-month-nav > span {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 800;
-  min-width: 112px;
+  min-width: 0;
   text-align: center;
   text-transform: uppercase;
 }
@@ -4754,14 +4756,17 @@ html[data-theme="dark"] {
     align-items: stretch;
     display: grid;
     gap: 14px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .activity-expense-month-nav {
-    justify-content: space-between;
+    grid-column: 1 / -1;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    width: 100%;
   }
 
   .activity-expense-month-nav > span {
-    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .expense-category-empty {

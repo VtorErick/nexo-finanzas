@@ -98,6 +98,33 @@ test.describe("Nexo UI flows", () => {
     await page.screenshot({ path: "review-captures/audit34-activity-history-controls-mobile.png", fullPage: false });
   });
 
+  test("centers the activity expense month navigator on mobile", async ({ page }) => {
+    test.skip(test.info().project.name !== "mobile-chromium", "Este comportamiento solo aplica al layout móvil.");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/?view=activity");
+
+    const card = page.locator("#activity-view .activity-expense-category-card");
+    await card.scrollIntoViewIfNeeded();
+    const metrics = await card.locator(".activity-expense-month-nav").evaluate((element) => {
+      const cardBox = element.closest<HTMLElement>(".activity-expense-category-card")?.getBoundingClientRect();
+      const previous = element.querySelector<HTMLElement>("button:first-child")?.getBoundingClientRect();
+      const month = element.querySelector<HTMLElement>("span")?.getBoundingClientRect();
+      const next = element.querySelector<HTMLElement>("button:last-child")?.getBoundingClientRect();
+      return {
+        cardLeft: cardBox?.left ?? 0,
+        cardRight: cardBox?.right ?? 0,
+        previousLeft: previous?.left ?? 0,
+        monthCenter: month ? (month.left + month.right) / 2 : 0,
+        nextRight: next?.right ?? 0,
+      };
+    });
+    const cardCenter = (metrics.cardLeft + metrics.cardRight) / 2;
+    expect(metrics.previousLeft - metrics.cardLeft).toBeGreaterThanOrEqual(12);
+    expect(metrics.cardRight - metrics.nextRight).toBeGreaterThanOrEqual(6);
+    expect(Math.abs(metrics.monthCenter - cardCenter)).toBeLessThanOrEqual(2);
+    await page.screenshot({ path: "review-captures/audit35-activity-expense-month-nav-mobile.png", fullPage: false });
+  });
+
   test("keeps the activity cashflow chart inset on mobile", async ({ page }) => {
     test.skip(test.info().project.name !== "mobile-chromium", "Este comportamiento solo aplica al layout móvil.");
     await page.setViewportSize({ width: 390, height: 844 });
