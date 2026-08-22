@@ -82,8 +82,14 @@ test.describe("Nexo UI flows", () => {
     const plannedPanel = page.locator(".planned-movements-panel");
     const plannedToggle = plannedPanel.locator(".planned-movements-toggle");
     await expect(plannedToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#activity-view .ledger-heading .eyebrow")).toHaveCount(0);
+    await expect(page.locator("#activity-view .view-header-end")).toHaveCount(0);
+    await expect(page.locator("#activity-view").getByRole("button", { name: /Registrar movimiento/ })).toHaveCount(0);
+    await page.locator("#activity-view .ledger-heading").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "review-captures/audit30-activity-clean-header-mobile.png", fullPage: false });
 
-    await page.getByRole("button", { name: "Planear movimiento", exact: true }).click();
+    await plannedToggle.click();
+    await plannedPanel.getByRole("button", { name: /Planear movimiento/ }).click();
     const dialog = page.getByRole("dialog", { name: "Planear movimiento" });
     await expect(dialog).toBeVisible();
     await expect(dialog.locator(".event-form-grid")).toBeVisible();
@@ -106,7 +112,6 @@ test.describe("Nexo UI flows", () => {
     await page.locator(".activity-month-group").first().scrollIntoViewIfNeeded();
     await page.screenshot({ path: "review-captures/audit26-activity-colors-mobile.png", fullPage: false });
 
-    await plannedToggle.click();
     await expect(plannedPanel.locator(".movement-actions").first()).toBeVisible();
     await plannedPanel.locator(".events-card").scrollIntoViewIfNeeded();
     const actionMetrics = await plannedPanel.locator(".movement-actions").evaluateAll((actions) => actions.map((action) => {
@@ -127,7 +132,8 @@ test.describe("Nexo UI flows", () => {
     await page.getByRole("button", { name: "Hoy", exact: true }).click();
     await page.getByRole("button", { name: "Actividad", exact: true }).click();
     await expect(page.locator(".planned-movements-toggle")).toHaveAttribute("aria-expanded", "false");
-    await expect(page.getByRole("button", { name: "Planear movimiento", exact: true })).toBeVisible();
+    await expect(page.locator("#activity-view .view-header-end")).toHaveCount(0);
+    await expect(page.locator("#activity-view").getByRole("button", { name: /Registrar movimiento/ })).toHaveCount(0);
   });
 
   test("keeps five clear mobile destinations", async ({ page }) => {

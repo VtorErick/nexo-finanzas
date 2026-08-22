@@ -2572,9 +2572,6 @@ html[data-theme="dark"] .net-worth-card { background: #0a111c; }
 @media (max-width: 699px) {
   .overview-flow-link { align-items: stretch; display: grid; gap: 7px; margin-left: 18px; margin-right: 18px; }
   .overview-flow-link .text-button { justify-self: start; }
-  .activity-heading-actions { display: grid; gap: 7px; grid-template-columns: 1fr 1fr; }
-  .activity-heading-actions .currency-pill { grid-column: 1 / -1; justify-self: start; }
-  .activity-heading-actions button { width: 100%; }
   .planned-movements-toggle { min-height: 68px; padding-left: 16px; padding-right: 16px; }
   .planned-movements-copy strong { font-size: 14px; }
   .planned-movements-copy small { font-size: 11px; }

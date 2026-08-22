@@ -64,7 +64,7 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /aria-label="Cambiar a tema oscuro"/);
   assert.match(html, /no es un ingreso/);
   assert.match(html, /Cobertura actual/);
-  assert.match(html, /Planear movimiento/);
+  assert.doesNotMatch(html, /Planear movimiento/);
   assert.match(html, /Abrir respaldo/);
   assert.match(html, /Aportar/);
   assert.match(html, /Ajustar meta/);
@@ -76,6 +76,7 @@ test("renders accessible navigation and controls", async () => {
   assert.match(html, /Aplicar/);
   assert.match(html, /Filtrar por categoría/);
   assert.match(html, /aria-label="Buscar concepto o categoría"/);
+  assert.doesNotMatch(html, /activity-plan-link/);
   assert.match(html, /role="slider" aria-label="Explorar periodos de la proyección"/);
   assert.match(html, /Neto estimado al final/);
   assert.doesNotMatch(html, /Claridad para decidir mejor/);
@@ -123,7 +124,7 @@ test("includes the extended planning controls", async () => {
   assert.match(source, /savedMode === "example" \? createExampleTransactions\(today\) : \[\]/);
   assert.match(source, /skippedDates: item\.skippedDates\.filter\(\(date\) => date !== event\.date\)/);
   assert.match(source, /completedDates: item\.completedDates\.filter\(\(date\) => date !== event\.date\)/);
-  assert.match(source, /transactions\.length === 1 \? "operación" : "operaciones"/);
+  assert.match(source, /group\.transactions\.length === 1 \? "" : "s"/);
   assert.match(source, /Cada semana/);
   assert.match(source, /Cada mes/);
   assert.match(source, /Cada año/);

@@ -1985,10 +1985,6 @@ export default function Home() {
     setEventEditorOpen(true);
   }
 
-  function startPlannedMovement() {
-    openNewEvent();
-  }
-
   function editEvent(id: number) {
     closeInfoTips();
     const event = events.find((item) => item.id === id);
@@ -2515,7 +2511,6 @@ export default function Home() {
             eyebrow="ACTIVIDAD"
             title="Tus movimientos."
             description="Registra lo que entró y salió de tus cuentas."
-            end={<><span className="currency-pill">{transactions.length} {transactions.length === 1 ? "operación" : "operaciones"} · MXN</span><button className="text-button activity-plan-link" type="button" onClick={startPlannedMovement}>Planear movimiento</button><button className="primary-button" type="button" onClick={() => openNewTransaction("expense", undefined, true)}>+ Registrar movimiento</button></>}
           />
 
           <ContextRail label="Estado de actividad">
@@ -2543,7 +2538,7 @@ export default function Home() {
           </details>
 
           <section className="panel ledger-card">
-            <div className="ledger-heading"><div><span className="eyebrow">HISTORIAL</span><h2>Historial</h2><p>Elige un mes y encuentra una operación cuando la necesites.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
+            <div className="ledger-heading"><div><h2>Historial</h2><p>Elige un mes y encuentra una operación cuando la necesites.</p></div><div className="search-field" role="search"><span aria-hidden="true">⌕</span><label className="sr-only" htmlFor="activity-search">Buscar concepto o categoría</label><input id="activity-search" aria-label="Buscar concepto o categoría" type="search" placeholder="Buscar concepto o categoría" value={activitySearch} onChange={(event) => setActivitySearch(event.target.value)} />{activitySearch && <button type="button" className="search-clear" aria-label="Borrar búsqueda" onClick={() => setActivitySearch("")}>×</button>}</div></div>
             <div className="activity-month-selector" aria-label="Cambiar mes en vista">
               <button type="button" className="month-step-button" aria-label="Mes anterior" disabled={visibleActivityMonth <= (activityMonthOptions.at(-1) ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, -1))}>‹</button>
               <div className="picker-form-label"><span className="sr-only">Mes en vista</span><PickerField label="Mes en vista" ariaLabel="Mes en vista" value={visibleActivityMonth} options={activityMonthOptions.map((month) => ({ value: month, label: formatMonthGroupLabel(month) }))} onChange={setActivityMonth} /></div>
@@ -2565,7 +2560,7 @@ export default function Home() {
                  icon="⌕"
                  title={activityFiltersActive ? "No encontramos movimientos" : "Todavía no hay actividad real"}
                  description={activityFiltersActive ? "Prueba otro filtro o registra una operación nueva." : "Registra tu primer ingreso o gasto para comenzar a ver tu flujo mensual."}
-                 actions={<>{activityFiltersActive && <button type="button" className="secondary-button" onClick={clearActivityFilters}>Limpiar filtros</button>}<button type="button" className="primary-button" onClick={() => openNewTransaction("expense", undefined, true)}>Registrar movimiento</button></>}
+                 actions={activityFiltersActive ? <button type="button" className="secondary-button" onClick={clearActivityFilters}>Limpiar filtros</button> : undefined}
                />
             ) : (
               <div className="activity-month-groups">
