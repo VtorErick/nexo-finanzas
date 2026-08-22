@@ -4531,6 +4531,36 @@ html[data-theme="dark"] {
   overflow: hidden;
 }
 
+.activity-expense-category-card {
+  margin-bottom: 24px;
+}
+
+.activity-expense-heading {
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.activity-expense-month-nav {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.activity-expense-month-nav > span {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 112px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.activity-expense-month-nav .month-step-button {
+  height: 34px;
+  width: 34px;
+}
+
 .overview-cashflow .overview-secondary-metric {
   display: block;
 }
@@ -4682,6 +4712,20 @@ html[data-theme="dark"] {
 
   .expense-category-item {
     min-height: 46px;
+  }
+
+  .activity-expense-heading {
+    align-items: stretch;
+    display: grid;
+    gap: 14px;
+  }
+
+  .activity-expense-month-nav {
+    justify-content: space-between;
+  }
+
+  .activity-expense-month-nav > span {
+    flex: 1 1 auto;
   }
 
   .expense-category-empty {

@@ -134,6 +134,20 @@ test.describe("Nexo UI flows", () => {
     await expect(page.locator(".planned-movements-toggle")).toHaveAttribute("aria-expanded", "false");
     await expect(page.locator("#activity-view .view-header-end")).toHaveCount(0);
     await expect(page.locator("#activity-view").getByRole("button", { name: /Registrar movimiento/ })).toHaveCount(0);
+
+    const expenseCard = page.locator("#activity-view .activity-expense-category-card");
+    const expenseMonth = expenseCard.locator(".activity-expense-month-nav > span");
+    await expenseCard.scrollIntoViewIfNeeded();
+    await expect(expenseCard.getByRole("heading", { name: "En qué se fue tu dinero" })).toBeVisible();
+    const currentExpenseMonth = (await expenseMonth.textContent())?.trim() ?? "";
+    await expenseCard.getByRole("button", { name: "Mes anterior de gastos" }).click();
+    await expect(expenseMonth).not.toHaveText(currentExpenseMonth);
+    await page.getByRole("button", { name: "Hoy", exact: true }).click();
+    await page.getByRole("button", { name: "Actividad", exact: true }).click();
+    await expect(expenseMonth).toHaveText(currentExpenseMonth);
+    await expect(page).toHaveURL(/\?view=activity$/);
+    await expenseCard.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "review-captures/audit31-activity-expenses-monthly-mobile.png", fullPage: false });
   });
 
   test("keeps five clear mobile destinations", async ({ page }) => {

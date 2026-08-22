@@ -823,6 +823,21 @@ const EXPENSE_CATEGORY_COLORS = [
   "var(--chart-category-5)",
 ] as const;
 
+function buildExpenseCategoryData(transactions: Transaction[], monthKey: string): ExpenseCategoryPoint[] {
+  const totals = new Map<string, number>();
+  transactions
+    .filter((transaction) => transaction.date.startsWith(monthKey) && transaction.kind === "expense")
+    .forEach((transaction) => totals.set(transaction.category, (totals.get(transaction.category) ?? 0) + transaction.amount));
+  const ordered = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  const total = ordered.reduce((sum, [, value]) => sum + value, 0);
+  return ordered.map(([label, value], index) => ({
+    label,
+    value,
+    percentage: total > 0 ? (value / total) * 100 : 0,
+    color: EXPENSE_CATEGORY_COLORS[index % EXPENSE_CATEGORY_COLORS.length],
+  }));
+}
+
 function CashflowChart({ data }: { data: CashflowPoint[] }) {
   const maxValue = Math.max(1, ...data.flatMap((point) => [point.income, point.expense]));
   return (
@@ -1251,20 +1266,7 @@ export default function Home() {
   const monthIncome = currentMonthTransactions.filter((transaction) => transaction.kind === "income").reduce((sum, transaction) => sum + transaction.amount, 0);
   const monthExpense = currentMonthTransactions.filter((transaction) => transaction.kind === "expense").reduce((sum, transaction) => sum + transaction.amount, 0);
   const monthNet = monthIncome - monthExpense;
-  const expenseCategoryData = useMemo<ExpenseCategoryPoint[]>(() => {
-    const totals = new Map<string, number>();
-    currentMonthTransactions
-      .filter((transaction) => transaction.kind === "expense")
-      .forEach((transaction) => totals.set(transaction.category, (totals.get(transaction.category) ?? 0) + transaction.amount));
-    const ordered = [...totals.entries()].sort((a, b) => b[1] - a[1]);
-    const total = ordered.reduce((sum, [, value]) => sum + value, 0);
-    return ordered.map(([label, value], index) => ({
-      label,
-      value,
-      percentage: total > 0 ? (value / total) * 100 : 0,
-      color: EXPENSE_CATEGORY_COLORS[index % EXPENSE_CATEGORY_COLORS.length],
-    }));
-  }, [currentMonthTransactions]);
+  const expenseCategoryData = useMemo(() => buildExpenseCategoryData(transactions, currentMonthKey), [transactions, currentMonthKey]);
   const deferredActivitySearch = useDeferredValue(activitySearch);
   const activityMonthOptions = useMemo(() => {
     const transactionMonths = transactions.map((transaction) => transaction.date.slice(0, 7));
@@ -1285,6 +1287,7 @@ export default function Home() {
   const activityMonthExpense = activityMonthTransactions.filter((transaction) => transaction.kind === "expense").reduce((sum, transaction) => sum + transaction.amount, 0);
   const activityMonthNet = activityMonthIncome - activityMonthExpense;
   const activityMonthLabel = formatMonthGroupLabel(visibleActivityMonth);
+  const activityExpenseCategoryData = useMemo(() => buildExpenseCategoryData(transactions, visibleActivityMonth), [transactions, visibleActivityMonth]);
   const cashflowData = useMemo<CashflowPoint[]>(() => Array.from({ length: 6 }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth() - 5 + index, 1, 12);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -1400,7 +1403,7 @@ export default function Home() {
       setActivityFilter(activityFilterFromLocation(url.searchParams.get("kind")));
       setActivityCategory(url.searchParams.get("category") || "all");
       setActivitySearch(url.searchParams.get("q") || "");
-      setActivityMonth(activityMonthFromLocation(url.searchParams.get("month"), monthKeyFromDate(today)));
+      setActivityMonth(nextView === "activity" ? activityMonthFromLocation(url.searchParams.get("month"), monthKeyFromDate(today)) : monthKeyFromDate(today));
       setActivityLocationReady(true);
     };
     syncLocationState();
@@ -2422,11 +2425,13 @@ export default function Home() {
     closeInfoTips();
     setPlannedMovementsOpen(false);
     closeEventEditor();
+    if (view !== "activity") setActivityMonth(currentMonthKey);
     setActiveView(view);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       if (view === "overview") url.searchParams.delete("view");
       else url.searchParams.set("view", view);
+      if (view !== "activity") url.searchParams.delete("month");
       const nextUrl = `${url.pathname}${url.search}${url.hash}`;
       if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
         const method = options?.replace ? "replaceState" : "pushState";
@@ -2585,6 +2590,17 @@ export default function Home() {
             )}
            </section>
            <div>{renderPlannedMovements()}</div>
+           <section className="panel expense-category-card activity-expense-category-card" aria-labelledby="activity-expense-category-title">
+             <div className="panel-heading compact activity-expense-heading">
+               <div><span className="eyebrow">GASTOS DEL MES</span><h2 id="activity-expense-category-title">En qué se fue tu dinero</h2><p>Distribución por categoría en {activityMonthLabel.toLocaleLowerCase("es-MX")}.</p></div>
+               <div className="activity-expense-month-nav" aria-label="Cambiar mes de gastos">
+                 <button type="button" className="month-step-button" aria-label="Mes anterior de gastos" disabled={visibleActivityMonth <= (activityMonthOptions.at(-1) ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, -1))}>‹</button>
+                 <span aria-live="polite">{activityMonthLabel}</span>
+                 <button type="button" className="month-step-button" aria-label="Mes siguiente de gastos" disabled={visibleActivityMonth >= (activityMonthOptions[0] ?? currentMonthKey)} onClick={() => setActivityMonth((current) => shiftMonthKey(current, 1))}>›</button>
+               </div>
+             </div>
+             <ExpenseCategoryChart data={activityExpenseCategoryData} />
+           </section>
          </section>
 
         <section className="dashboard-grid view-page" hidden={activeView !== "accounts"}>
